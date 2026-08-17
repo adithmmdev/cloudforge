@@ -3,23 +3,25 @@
   "current_phase": "Phase 2 (Weeks 3-4) Core Engine & Local LLM",
   "completed_tasks": [
     "weeks_1_2_scaffold_db_adapters",
-    "task_2_1_jinja2_templates"
+    "task_2_1_jinja2_templates",
+    "task_2_2_build_service",
+    "task_2_3_aws_setup_backend",
+    "task_2_4_aws_setup_frontend",
+    "task_2_5_ec2_provisioner",
+    "task_2_6_deploy_service",
+    "week_8_health_checks_rollback"
   ],
   "in_progress_task": {
-    "task": "task_2_2_build_service",
-    "started_at": "2026-08-17T17:35:00Z",
+    "task": "week_9_metrics_dashboard_base",
+    "started_at": "2026-08-17T19:02:00Z",
     "files_modified": [],
     "files_remaining": [],
     "blockers": [],
     "decisions_made": [
-      "Completed Task 2.1: Jinja2 templates and verified with tests."
+      "Week 8 completed. Health checks (3-tier), Rollback (single/mern), Port Allocator implemented."
     ]
   },
   "pending_tasks": [
-    "week_5_aws_setup_wizard",
-    "week_6_ec2_auto_provisioning",
-    "week_7_deploy_pipeline",
-    "week_8_health_checks_rollback",
     "week_9_metrics_dashboard_base",
     "week_10_classifier_grammar_action_functions",
     "week_11_local_llm_diagnosis",
