@@ -11,21 +11,21 @@
     "task_2_6_deploy_service",
     "week_8_health_checks_rollback",
     "week_9_metrics_dashboard_base",
-    "week_10_classifier_grammar_action_functions"
+    "week_10_classifier_grammar_action_functions",
+    "week_11_local_llm_diagnosis",
+    "week_12_provider_agnostic_cloud_escalation"
   ],
   "in_progress_task": {
-    "task": "week_11_local_llm_diagnosis",
-    "started_at": "2026-08-17T19:10:00Z",
+    "task": "week_13_shadow_verification_gate",
+    "started_at": "2026-08-17T19:15:00Z",
     "files_modified": [],
     "files_remaining": [],
     "blockers": [],
     "decisions_made": [
-      "Week 10 completed. Error classifier, grammar validator, apply action stubs, and redactor implemented."
+      "Week 11/12 completed. Local LLM client and cloud LLM factory implemented. Prompt design handles strictly schema validation and handles markdown wrapper gracefully. Disclosure recorded before cloud API calls."
     ]
   },
   "pending_tasks": [
-    "week_11_local_llm_diagnosis",
-    "week_12_provider_agnostic_cloud_escalation",
     "week_13_shadow_verification_gate",
     "week_14_autonomy_modes_full_loop_wiring_deployment_docs",
     "week_15_mern_hardening_adapter_registry_docs",
