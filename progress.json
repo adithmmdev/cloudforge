@@ -14,20 +14,20 @@
     "week_10_classifier_grammar_action_functions",
     "week_11_local_llm_diagnosis",
     "week_12_provider_agnostic_cloud_escalation",
-    "week_13_shadow_verification_gate"
+    "week_13_shadow_verification_gate",
+    "week_14_autonomy_modes_full_loop_wiring_deployment_docs"
   ],
   "in_progress_task": {
-    "task": "week_14_autonomy_modes_full_loop_wiring_deployment_docs",
-    "started_at": "2026-08-17T19:20:00Z",
+    "task": "week_15_mern_hardening_adapter_registry_docs",
+    "started_at": "2026-08-17T19:25:00Z",
     "files_modified": [],
     "files_remaining": [],
     "blockers": [],
     "decisions_made": [
-      "Week 13 completed. Shadow verification runs container or compose cluster, verifies runtime and smoke tests, tears down resources, and saves results."
+      "Week 14 completed. Orchestrator loop implemented with autonomy mode support. Deployment document generator uses Jinja2."
     ]
   },
   "pending_tasks": [
-    "week_14_autonomy_modes_full_loop_wiring_deployment_docs",
     "week_15_mern_hardening_adapter_registry_docs",
     "week_16_final_hardening_e2e_demo_demo_prep"
   ],
