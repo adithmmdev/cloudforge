@@ -1,0 +1,30 @@
+services:
+  client:
+    image: cloudforge-{{ project_id }}-client:{{ deployment_id }}
+    ports: ["{{ host_port }}:80"]
+    depends_on: [server]
+    networks: [cloudforge-net]
+    deploy:
+      resources:
+        limits: { memory: 256M, cpus: "0.5" }
+  server:
+    image: cloudforge-{{ project_id }}-server:{{ deployment_id }}
+    expose: ["5000"]
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/app
+    depends_on: [mongo]
+    networks: [cloudforge-net]
+    deploy:
+      resources:
+        limits: { memory: 256M, cpus: "0.5" }
+  mongo:
+    image: mongo:7
+    volumes: ["mongo-data:/data/db"]
+    networks: [cloudforge-net]
+    deploy:
+      resources:
+        limits: { memory: 256M, cpus: "0.5" }
+networks:
+  cloudforge-net: {}
+volumes:
+  mongo-data: {}

@@ -2,16 +2,17 @@
   "last_updated": "2026-08-17T15:33:04Z",
   "current_phase": "Phase 2 (Weeks 3-4) Core Engine & Local LLM",
   "completed_tasks": [
-    "weeks_1_2_scaffold_db_adapters"
+    "weeks_1_2_scaffold_db_adapters",
+    "task_2_1_jinja2_templates"
   ],
   "in_progress_task": {
-    "task": "weeks_3_4_templates_build_log_streaming",
-    "started_at": "2026-08-17T17:31:00Z",
+    "task": "task_2_2_build_service",
+    "started_at": "2026-08-17T17:35:00Z",
     "files_modified": [],
     "files_remaining": [],
     "blockers": [],
     "decisions_made": [
-      "Verified Phase 1 runtime Definition of Done via Docker Compose, Alembic migration, and Pytest."
+      "Completed Task 2.1: Jinja2 templates and verified with tests."
     ]
   },
   "pending_tasks": [
