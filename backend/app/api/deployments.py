@@ -38,13 +38,12 @@ def get_disclosures(id: int, db: Session = Depends(get_db)):
     failures = db.query(Failure).filter(Failure.deployment_id == id).all()
     disclosures = []
     for f in failures:
-        for d in f.diagnoses:
-            disc = db.query(Disclosure).filter(Disclosure.diagnosis_id == d.id).first()
-            if disc:
-                disclosures.append({
-                    "id": disc.id, "redacted_signature": disc.redacted_signature,
-                    "provider_name": disc.provider_name, "timestamp": disc.timestamp
-                })
+        discs = db.query(Disclosure).filter(Disclosure.failure_id == f.id).all()
+        for disc in discs:
+            disclosures.append({
+                "id": disc.id, "redacted_signature": disc.content_sent,
+                "provider_name": disc.destination, "timestamp": disc.created_at
+            })
     return disclosures
 
 @router.get("/{id}/shadow-tests")
@@ -55,7 +54,7 @@ def get_shadow_tests(id: int, db: Session = Depends(get_db)):
     for a in actions:
         for t in a.shadow_tests:
             tests.append({
-                "id": t.id, "remediation_action_id": a.id, "status": t.status, "logs": t.logs
+                "id": t.id, "remediation_action_id": a.id, "test_name": t.test_name, "passed": t.passed, "output": t.output
             })
     return tests
 
@@ -71,7 +70,7 @@ def get_report(id: int, db: Session = Depends(get_db)):
     report = db.query(DeploymentReport).filter(DeploymentReport.deployment_id == id).first()
     if not report:
         raise HTTPException(404, "Report not found")
-    return {"id": report.id, "markdown_content": report.markdown_content, "generated_at": report.generated_at}
+    return {"id": report.id, "markdown_content": report.report_markdown, "generated_at": report.generated_at}
 
 @router.get("/{id}/metrics")
 def get_metrics(id: int, db: Session = Depends(get_db)):

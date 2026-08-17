@@ -7,7 +7,7 @@ from app.models.autonomy_setting import AutonomySetting
 from typing import List
 import shutil
 import os
-from app.utils.zip_guard import ZipGuard
+from app.utils.zip_guard import safe_extract_zip, ZipBombError
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -18,23 +18,19 @@ async def upload_project(file: UploadFile = File(...), db: Session = Depends(get
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
-    try:
-        ZipGuard.verify_zip(file_path)
-    except ValueError as e:
-        os.remove(file_path)
-        raise HTTPException(status_code=400, detail=str(e))
-        
-    # Extract project
     project_name = file.filename.replace('.zip', '')
     extract_path = f"/tmp/{project_name}"
-    import zipfile
-    with zipfile.ZipFile(file_path, 'r') as zip_ref:
-        zip_ref.extractall(extract_path)
+    try:
+        safe_extract_zip(file_path, extract_path)
+    except ZipBombError as e:
+        os.remove(file_path)
+        raise HTTPException(status_code=400, detail=str(e))
+
         
     # Create DB entry
-    from app.detector.registry import detect
-    adapter, _ = detect(extract_path)
-    framework = adapter.get_stack_name() if adapter else "unknown"
+    from app.detector import registry
+    adapter, _ = registry.detect(extract_path)
+    framework = adapter.name if adapter else "unknown"
     
     project = Project(name=project_name, framework=framework)
     db.add(project)
@@ -60,10 +56,10 @@ def get_autonomy(project_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "Autonomy setting not found")
     return {"mode": setting.mode}
 
+from pydantic import BaseModel
 class AutonomyUpdate(BaseModel):
     mode: str
 
-from pydantic import BaseModel
 @router.put("/{project_id}/autonomy")
 def update_autonomy(project_id: int, req: AutonomyUpdate, db: Session = Depends(get_db)):
     setting = db.query(AutonomySetting).filter(AutonomySetting.project_id == project_id).first()
@@ -83,7 +79,8 @@ def trigger_deploy(project_id: int, background_tasks: BackgroundTasks, db: Sessi
     if not project:
         raise HTTPException(404, "Project not found")
         
-    deployment = Deployment(project_id=project.id, status="pending")
+    dep_type = "mern" if project.framework == "mern" else "single_container"
+    deployment = Deployment(project_id=project.id, deployment_type=dep_type, status="pending")
     db.add(deployment)
     db.commit()
     db.refresh(deployment)

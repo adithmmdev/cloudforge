@@ -21,3 +21,5 @@ class AdapterRegistry:
         return None, {}
 
 registry = AdapterRegistry()
+
+from . import adapters

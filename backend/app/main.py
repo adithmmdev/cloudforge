@@ -18,8 +18,8 @@ app = FastAPI(title="CloudForge API", lifespan=lifespan)
 def health_check():
     return {"status": "ok"}
 
-app.include_router(aws_setup_router)
-app.include_router(projects_router)
-app.include_router(deployments_router)
-app.include_router(remediation_router)
+app.include_router(aws_setup_router, prefix="/api")
+app.include_router(projects_router, prefix="/api")
+app.include_router(deployments_router, prefix="/api")
+app.include_router(remediation_router, prefix="/api")
 app.include_router(ws_router, prefix="/api")

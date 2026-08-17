@@ -3,7 +3,7 @@ import pytest
 from app.detector import registry
 from app.detector.adapters.express import UnsupportedStackError
 
-base_dir = "tests/fixtures"
+base_dir = os.path.join(os.path.dirname(__file__), "fixtures")
 
 def test_react_vite():
     adapter, meta = registry.detect(os.path.join(base_dir, "react-sample"))

@@ -1,6 +1,7 @@
 import subprocess
 import time
 import requests
+import os
 from sqlalchemy.orm import Session
 from app.models.shadow_test import ShadowTest
 import logging

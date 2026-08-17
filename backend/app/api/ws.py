@@ -5,7 +5,7 @@ from app.db.session import get_db
 from app.models.deployment import Deployment
 from app.models.metric import Metric
 
-router = APIRouter(prefix="/api/ws", tags=["websocket"])
+router = APIRouter(prefix="/ws", tags=["websocket"])
 
 @router.websocket("/deployments/{deployment_id}")
 async def deployment_websocket(websocket: WebSocket, deployment_id: int, db: Session = Depends(get_db)):

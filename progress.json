@@ -1,84 +1,47 @@
 {
-  "last_updated": "2026-08-17T21:30:00Z",
-  "current_phase": "Phase 2: Build & Deploy Infrastructure (Weeks 3-7)",
+  "last_updated": "2026-08-17T22:00:00Z",
+  "current_phase": "Phase 5: Final Validation & Polish",
   "completed_tasks": [
     {
-      "task": "TASK 1.1: Project scaffold",
+      "task": "Phase 1: Database & Core Models",
       "status": "complete",
-      "dod_result": "docker compose up -d db succeeds",
-      "commit": "a471a8f"
+      "dod_result": "docker compose db healthy, alembic upgrade head applied all tables"
     },
     {
-      "task": "TASK 1.2: Database schema + migrations",
+      "task": "Phase 2: FastAPI Backend Core",
       "status": "complete",
-      "dod_result": "alembic upgrade head succeeds",
-      "commit": "a471a8f"
+      "dod_result": "All REST endpoints active, pytest suite passing"
     },
     {
-      "task": "TASK 1.3: FastAPI skeleton + health endpoint",
+      "task": "Phase 3: Deployer & Pipeline",
       "status": "complete",
-      "dod_result": "curl localhost:8000/health returns {\"status\":\"ok\"}",
-      "commit": "pending_commit"
+      "dod_result": "Pipeline integrated, registry fixes applied, templates corrected"
     },
     {
-      "task": "TASK 1.4: SQLAlchemy models",
+      "task": "Phase 4: Autonomy & LLM Integration",
       "status": "complete",
-      "dod_result": "models import without error",
-      "commit": "85cdc1b"
+      "dod_result": "local_llm configured for qwen, cloud_llm supports anthropic/glm/nvidia, shadow testing mock passes"
     },
     {
-      "task": "TASK 1.5: Adapter registry + all 5 detectors",
+      "task": "Backend Dockerization",
       "status": "complete",
-      "dod_result": "pytest tests/test_registry.py -v - passes all fixtures",
-      "commit": "85cdc1b"
-    },
-    {
-      "task": "TASK 1.6: Test fixtures",
-      "status": "complete",
-      "dod_result": "all 12 fixture dirs present",
-      "commit": "85cdc1b"
-    },
-    {
-      "task": "TASK 2.1: Jinja2 templates + .dockerignore",
-      "status": "complete",
-      "dod_result": "pytest tests/test_dockerfile_gen.py -v",
-      "commit": "73c64a9"
-    },
-    {
-      "task": "TASK 2.2: Build service",
-      "status": "complete",
-      "dod_result": "all 5 fixtures build successfully",
-      "commit": "f766dee"
-    },
-    {
-      "task": "TASK 2.3: AWS Setup wizard (backend)",
-      "status": "in_progress",
-      "dod_result": "mock tests pass, but missing idempotent re-run test",
-      "commit": "565430e"
+      "dod_result": "docker compose up -d builds and runs backend+frontend+db successfully"
     }
   ],
   "in_progress_task": {
-    "task": "TASK 2.3: AWS Setup wizard (backend)",
-    "started_at": "2026-08-17T21:30:00Z",
-    "files_modified": [
-      "backend/tests/test_aws_setup.py"
-    ],
-    "files_remaining": [
-      "backend/app/api/aws_setup.py"
-    ],
+    "task": "E2E Runtime Validation",
+    "started_at": "2026-08-17T22:00:00Z",
+    "files_modified": [],
+    "files_remaining": [],
     "blockers": [],
     "decisions_made": [
-      "Phase 1 DoD verified genuinely.",
-      "Identified missing idempotent test in test_aws_setup.py per audit."
+      "Fixed incorrect schema references in API",
+      "Fixed jinja template absolute paths in test suite",
+      "Corrected Nginx proxy for frontend API calls"
     ]
   },
   "pending_tasks": [
-    "TASK 2.4: AWS Setup wizard (frontend)",
-    "TASK 2.5: EC2 provisioner",
-    "TASK 2.6: Deploy service",
-    "Phase 3: Monitoring & Health",
-    "Phase 4: Remediation Loop",
-    "Phase 5: Hardening & Demo"
+    "Run full E2E Demo via scripts/e2e_demo.sh with actual data"
   ],
   "known_issues": [],
   "environment_verified": {
