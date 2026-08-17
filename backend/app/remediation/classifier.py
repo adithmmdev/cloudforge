@@ -9,6 +9,7 @@ PATTERNS = [
     (r"(?:KeyError:\s*|undefined variable\s*|KeyError\s+)'?([A-Z_][A-Z0-9_]*)'?", "missing_env_var"),
     (r"(MongoNetworkError|ECONNREFUSED .*27017)", "db_connection_failed"),
     (r"npm ERR! code ERR_SOCKET_TIMEOUT", "build_network_error"),
+    (r"container exits within 2s, no matching CMD found", "missing_or_wrong_start_command")
 ]
 
 def classify_error(logs_or_status: str) -> dict:
@@ -35,12 +36,7 @@ def classify_error(logs_or_status: str) -> dict:
                 "error_class": error_class,
                 "extracted_token": extracted_token
             }
-            
-    if "exits within 2s" in logs_or_status or "no matching CMD found" in logs_or_status:
-         return {
-             "error_class": "missing_or_wrong_start_command",
-             "extracted_token": ""
-         }
+
          
     return {
         "error_class": "unclassified",

@@ -3,7 +3,7 @@ import requests
 from app.remediation.prompt import generate_prompt, parse_llm_response
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b-instruct")
 
 def get_remediation_action(redacted_signature: dict) -> dict:
     prompt = generate_prompt(redacted_signature)

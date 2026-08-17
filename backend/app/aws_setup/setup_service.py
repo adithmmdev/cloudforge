@@ -25,6 +25,20 @@ def run_aws_setup(db: Session, allowed_ssh_cidr: str = "0.0.0.0/0", log_callback
         if e.response['Error'].get('Code') != 'DryRunOperation':
             raise RuntimeError(f"EC2 permissions validation failed: {e}")
 
+    state = db.query(AWSSetupState).first()
+    if state and state.setup_status == 'complete':
+        # Check if resources still exist in AWS
+        try:
+            if state.security_group_id:
+                ec2.describe_security_groups(GroupIds=[state.security_group_id])
+            if state.key_pair_name:
+                ec2.describe_key_pairs(KeyNames=[state.key_pair_name])
+            log_callback("complete", "AWS Setup finished successfully (idempotent reuse).")
+            return state
+        except ClientError:
+            # Resources deleted in AWS, recreate them
+            pass
+
     # Step 2: Detect or Select VPC and Subnet
     log_callback("step2", "Detecting VPC and Subnet...")
     vpcs = ec2.describe_vpcs().get('Vpcs', [])

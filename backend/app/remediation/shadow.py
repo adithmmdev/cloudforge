@@ -13,13 +13,42 @@ def run_shadow_verification(db: Session, remediation_action_id: int, project_dir
     
     try:
         if deployment_type == "mern":
-            res = subprocess.run(["docker", "compose", "up", "-d", "--build"], cwd=project_dir, capture_output=True, text=True)
+            # For MERN, we need to build client and server with limits, then update compose or just use compose build?
+            # Actually, we can just run docker build manually for client and server.
+            for svc in ["client", "server"]:
+                svc_dir = os.path.join(project_dir, svc)
+                img_name = f"shadow_{svc}_{remediation_action_id}"
+                if os.path.exists(svc_dir):
+                    res = subprocess.run([
+                        "docker", "build", "--network=none", "--memory=2g", "--cpu-quota=100000",
+                        "-t", img_name, "."
+                    ], cwd=svc_dir, capture_output=True, text=True)
+                    if res.returncode != 0:
+                        tests.append({"name": f"build_{svc}", "passed": False, "output": res.stderr})
+                        return False
+                        
+            # Now we need to start them. The easiest is to replace image names in docker-compose.yml
+            compose_file = os.path.join(project_dir, "docker-compose.yml")
+            if os.path.exists(compose_file):
+                with open(compose_file, "r") as f:
+                    content = f.read()
+                # Replace image tags with shadow tags
+                import re
+                content = re.sub(r'image:\s*cloudforge-\d+-client:\d+', f'image: shadow_client_{remediation_action_id}', content)
+                content = re.sub(r'image:\s*cloudforge-\d+-server:\d+', f'image: shadow_server_{remediation_action_id}', content)
+                with open(compose_file, "w") as f:
+                    f.write(content)
+                    
+            res = subprocess.run(["docker", "compose", "up", "-d"], cwd=project_dir, capture_output=True, text=True)
             if res.returncode != 0:
-                tests.append({"name": "build_and_run", "passed": False, "output": res.stderr})
+                tests.append({"name": "run", "passed": False, "output": res.stderr})
                 return False
         else:
             img_name = f"shadow_img_{remediation_action_id}"
-            res = subprocess.run(["docker", "build", "--network=none", "-t", img_name, "."], cwd=project_dir, capture_output=True, text=True)
+            res = subprocess.run([
+                "docker", "build", "--network=none", "--memory=2g", "--cpu-quota=100000",
+                "-t", img_name, "."
+            ], cwd=project_dir, capture_output=True, text=True)
             if res.returncode != 0:
                 tests.append({"name": "build", "passed": False, "output": res.stderr})
                 return False
@@ -29,6 +58,7 @@ def run_shadow_verification(db: Session, remediation_action_id: int, project_dir
             if res.returncode != 0:
                 tests.append({"name": "run", "passed": False, "output": res.stderr})
                 return False
+
 
         # Wait for container to settle
         time.sleep(15)

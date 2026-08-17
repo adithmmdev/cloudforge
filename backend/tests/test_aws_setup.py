@@ -100,3 +100,32 @@ def test_run_aws_setup_no_ami(mock_boto3, db_session):
     
     with pytest.raises(RuntimeError, match="No suitable Ubuntu Jammy AMI found"):
         run_aws_setup(db_session)
+
+def test_run_aws_setup_idempotent(mock_boto3, db_session):
+    mock_sts, mock_ec2 = mock_boto3
+    
+    # Mock DB already has a complete state
+    existing_state = AWSSetupState(
+        setup_status='complete',
+        security_group_id='sg-existing',
+        key_pair_name='key-existing',
+        ami_id='ami-existing',
+        subnet_id='subnet-existing'
+    )
+    db_session.query.return_value.first.return_value = existing_state
+    
+    # Mock describe_security_groups and describe_key_pairs to return success
+    mock_ec2.describe_security_groups.return_value = {}
+    mock_ec2.describe_key_pairs.return_value = {}
+    
+    logs = []
+    state = run_aws_setup(db_session, log_callback=lambda s, m: logs.append(s))
+    
+    assert state == existing_state
+    assert "complete" in logs
+    
+    # Verify no new resources were created
+    assert not mock_ec2.create_security_group.called
+    assert not mock_ec2.create_key_pair.called
+    assert not db_session.add.called
+

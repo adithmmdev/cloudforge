@@ -7,7 +7,7 @@ from app.remediation.prompt import generate_prompt, parse_llm_response
 
 CLOUD_LLM_PROVIDER = os.getenv("CLOUD_LLM_PROVIDER", "anthropic")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "test-key")
-GLM_BASE_URL = os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
+GLM_BASE_URL = os.getenv("GLM_BASE_URL", "https://api.z.ai/api/paas/v4")
 GLM_API_KEY = os.getenv("GLM_API_KEY", "test-key")
 NVIDIA_NIM_BASE_URL = os.getenv("NVIDIA_NIM_BASE_URL", "https://integrate.api.nvidia.com/v1")
 NVIDIA_NIM_API_KEY = os.getenv("NVIDIA_NIM_API_KEY", "test-key")
@@ -20,7 +20,7 @@ def call_anthropic(prompt: str) -> str:
         "content-type": "application/json"
     }
     payload = {
-        "model": "claude-3-haiku-20240307",
+        "model": "claude-haiku-4-5-20251001",
         "max_tokens": 1024,
         "messages": [
             {"role": "user", "content": prompt}
@@ -66,9 +66,9 @@ def get_cloud_remediation_action(db: Session, failure_id: int, redacted_signatur
         if provider == "anthropic":
             response_text = call_anthropic(prompt)
         elif provider == "glm":
-            response_text = call_openai_compatible(GLM_BASE_URL, GLM_API_KEY, "glm-4", prompt)
+            response_text = call_openai_compatible(GLM_BASE_URL, GLM_API_KEY, "glm-5.2", prompt)
         elif provider == "nvidia_nim":
-            response_text = call_openai_compatible(NVIDIA_NIM_BASE_URL, NVIDIA_NIM_API_KEY, "meta/llama3-70b-instruct", prompt)
+            response_text = call_openai_compatible(NVIDIA_NIM_BASE_URL, NVIDIA_NIM_API_KEY, "z-ai/glm-5.2", prompt)
         else:
             raise ValueError(f"Unknown provider: {provider}")
             
