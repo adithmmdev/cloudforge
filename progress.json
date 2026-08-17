@@ -9,20 +9,20 @@
     "task_2_4_aws_setup_frontend",
     "task_2_5_ec2_provisioner",
     "task_2_6_deploy_service",
-    "week_8_health_checks_rollback"
+    "week_8_health_checks_rollback",
+    "week_9_metrics_dashboard_base"
   ],
   "in_progress_task": {
-    "task": "week_9_metrics_dashboard_base",
-    "started_at": "2026-08-17T19:02:00Z",
+    "task": "week_10_classifier_grammar_action_functions",
+    "started_at": "2026-08-17T19:05:00Z",
     "files_modified": [],
     "files_remaining": [],
     "blockers": [],
     "decisions_made": [
-      "Week 8 completed. Health checks (3-tier), Rollback (single/mern), Port Allocator implemented."
+      "Week 9 completed. Docker stats poller backend and React frontend dashboard with recharts implemented."
     ]
   },
   "pending_tasks": [
-    "week_9_metrics_dashboard_base",
     "week_10_classifier_grammar_action_functions",
     "week_11_local_llm_diagnosis",
     "week_12_provider_agnostic_cloud_escalation",
