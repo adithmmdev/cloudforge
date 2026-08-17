@@ -65,10 +65,12 @@ def get_cloud_remediation_action(db: Session, failure_id: int, redacted_signatur
     try:
         if provider == "anthropic":
             response_text = call_anthropic(prompt)
-        elif provider == "glm":
-            response_text = call_openai_compatible(GLM_BASE_URL, GLM_API_KEY, "glm-5.2", prompt)
-        elif provider == "nvidia_nim":
-            response_text = call_openai_compatible(NVIDIA_NIM_BASE_URL, NVIDIA_NIM_API_KEY, "z-ai/glm-5.2", prompt)
+        elif provider == 'glm':
+            model_name = os.getenv("CLOUD_LLM_MODEL_GLM", "glm-4.6")
+            response_text = call_openai_compatible(GLM_BASE_URL, GLM_API_KEY, model_name, prompt)
+        elif provider == 'nvidia_nim':
+            model_name = os.getenv("CLOUD_LLM_MODEL_GLM", "glm-4.6")
+            response_text = call_openai_compatible(NVIDIA_NIM_BASE_URL, NVIDIA_NIM_API_KEY, f"z-ai/{model_name}", prompt)
         else:
             raise ValueError(f"Unknown provider: {provider}")
             

@@ -108,7 +108,7 @@ def run_orchestration_loop(db: Session, deployment_id: int):
                 deployment_id=deployment_id,
                 action_type=action_data["action_type"],
                 params=action_data["params"],
-                status="proposed"
+                status="awaiting_approval"
             )
             db.add(rem_action)
             db.commit()

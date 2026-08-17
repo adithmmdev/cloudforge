@@ -11,7 +11,7 @@ class RemediationAction(Base):
     deployment_id = Column(Integer, ForeignKey('deployments.id', ondelete='CASCADE'))
     action_type = Column(String, nullable=False)
     params = Column(JSONB, nullable=False)
-    status = Column(String, nullable=False, default='proposed')
+    status = Column(String, nullable=False, default='awaiting_approval')
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     diagnosis = relationship("Diagnosis", back_populates="remediation_actions")

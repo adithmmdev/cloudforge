@@ -2,7 +2,7 @@ import os
 import requests
 from app.remediation.prompt import generate_prompt, parse_llm_response
 
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b-instruct")
 
 def get_remediation_action(redacted_signature: dict) -> dict:
@@ -16,7 +16,7 @@ def get_remediation_action(redacted_signature: dict) -> dict:
     }
     
     try:
-        response = requests.post(f"{OLLAMA_URL}/api/generate", json=payload, timeout=30)
+        response = requests.post(f"{OLLAMA_HOST}/api/generate", json=payload, timeout=30)
         response.raise_for_status()
         
         response_text = response.json().get("response", "")

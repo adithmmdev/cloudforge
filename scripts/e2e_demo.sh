@@ -67,9 +67,19 @@ function run_test() {
   
   echo "Deployment started with ID $DEP_ID"
   
-  # For demo purposes, we won't wait for the full deployment to finish since it can take minutes
-  # and this script is meant to verify the API pipeline triggers.
-  echo "Test $name triggered successfully."
+  echo "Waiting for deployment $DEP_ID to finish..."
+  while true; do
+    STATUS_RES=$(curl -s $API_URL/projects/$PROJ_ID/deployments)
+    STATUS=$(echo "$STATUS_RES" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
+    if [ "$STATUS" == "success" ] || [ "$STATUS" == "failed" ]; then
+      echo "Deployment $DEP_ID finished with status: $STATUS"
+      break
+    fi
+    echo "Waiting... (current status: $STATUS)"
+    sleep 5
+  done
+  
+  echo "Test $name completed."
   
   rm -rf /tmp/cloudforge_test /tmp/project.zip
 }

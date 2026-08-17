@@ -150,10 +150,6 @@ def apply_set_start_command(repo_path: str, params: dict):
                 else:
                     f.write(line)
 
-def apply_increase_memory_limit(repo_path: str, params: dict):
-    # This is typically enforced at runtime, but we might write it to a marker or compose.yml
-    pass
-
 def apply_set_env_var(repo_path: str, params: dict):
     service = params.get("service", "")
     target_dir = os.path.join(repo_path, service) if service and service != "app" else repo_path
@@ -176,8 +172,20 @@ def apply_set_env_var(repo_path: str, params: dict):
         with open(dockerfile, "w") as f:
             f.writelines(lines)
 
+def apply_increase_memory_limit(repo_path: str, params: dict):
+    # Write memory limit to a marker file for the deployer/builder to read
+    service = params.get("service", "app")
+    mb = params.get("mb", 512)
+    marker_file = os.path.join(repo_path, f".cf_mem_limit_{service}")
+    with open(marker_file, "w") as f:
+        f.write(str(mb))
+
 def apply_restart_service(repo_path: str, params: dict):
-    pass
+    # Write a restart marker file to force a restart during deployment
+    service = params.get("service", "app")
+    marker_file = os.path.join(repo_path, f".cf_restart_{service}")
+    with open(marker_file, "w") as f:
+        f.write("restart_requested")
 
 def apply_none(repo_path: str, params: dict):
     pass
