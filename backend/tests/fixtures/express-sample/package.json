@@ -1,0 +1,1 @@
+{"dependencies": {"express": "4"}, "scripts": {"start": "node src/server.js"}}
