@@ -8,7 +8,7 @@
     "files_modified": [],
     "files_remaining": [],
     "blockers": [
-      "Docker is not available. Phase 1 Definition of Done (Docker Compose database startup, Alembic migration, FastAPI /health) cannot be verified."
+      "Docker daemon is still not running or accessible. Command `docker compose up -d db` failed with: `failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine`. Definition of Done for Phase 1 remains unverified."
     ],
     "decisions_made": [
       "Reverted completion status of Phase 1 until real runtime verification can be performed with Docker."
