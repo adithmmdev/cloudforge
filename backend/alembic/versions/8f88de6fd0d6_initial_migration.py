@@ -144,8 +144,9 @@ def upgrade() -> None:
         'failures',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('deployment_id', sa.Integer(), nullable=True),
-        sa.Column('raw_error_excerpt', sa.String(), nullable=True),
+        sa.Column('error_message', sa.String(), nullable=True),
         sa.Column('error_class', sa.String(), nullable=True),
+        sa.Column('extracted_token', sa.String(), nullable=True),
         sa.Column('detected_at', sa.DateTime(timezone=True), server_default=sa.text('NOW()'), nullable=True),
         sa.ForeignKeyConstraint(['deployment_id'], ['deployments.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id')
@@ -214,6 +215,8 @@ def upgrade() -> None:
         sa.UniqueConstraint('deployment_id')
     )
 
+    # 16. Seed Admin User
+    op.execute("INSERT INTO users (username, password_hash, role) VALUES ('admin', 'hashed_password_mock', 'admin') ON CONFLICT DO NOTHING")
 
 
 def downgrade() -> None:

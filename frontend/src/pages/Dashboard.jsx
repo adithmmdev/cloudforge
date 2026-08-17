@@ -1,12 +1,25 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Server, Activity, Plus } from 'lucide-react';
+import axios from 'axios';
 
 export default function Dashboard() {
-  const projects = [
-    { id: 1, name: 'react-sample', framework: 'React', status: 'success', url: 'http://8.8.8.8' },
-    { id: 2, name: 'fastapi-sample', framework: 'FastAPI', status: 'failed', url: null },
-  ];
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        const res = await axios.get('/api/projects');
+        setProjects(res.data);
+      } catch (err) {
+        console.error("Failed to fetch projects", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProjects();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -19,26 +32,30 @@ export default function Dashboard() {
           </Link>
         </div>
         
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {projects.map((project) => (
-            <Link key={project.id} to={`/project/${project.id}`} className="block p-6 bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center">
-                  <Server className="w-8 h-8 text-blue-500 mr-3" />
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">{project.name}</h3>
-                    <p className="text-sm text-gray-500">{project.framework}</p>
+        {loading ? (
+          <p>Loading projects...</p>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {projects.map((project) => (
+              <Link key={project.id} to={`/project/${project.id}`} className="block p-6 bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center">
+                    <Server className="w-8 h-8 text-blue-500 mr-3" />
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">{project.name}</h3>
+                      <p className="text-sm text-gray-500">{project.framework}</p>
+                    </div>
                   </div>
+                  <div className={`w-3 h-3 rounded-full ${project.status === 'success' ? 'bg-green-500' : (project.status === 'failed' ? 'bg-red-500' : 'bg-yellow-500')}`} />
                 </div>
-                <div className={`w-3 h-3 rounded-full ${project.status === 'success' ? 'bg-green-500' : 'bg-red-500'}`} />
-              </div>
-              <div className="flex items-center text-sm text-gray-600">
-                <Activity className="w-4 h-4 mr-2" />
-                {project.status === 'success' ? 'Running smoothly' : 'Deployment failed'}
-              </div>
-            </Link>
-          ))}
-        </div>
+                <div className="flex items-center text-sm text-gray-600">
+                  <Activity className="w-4 h-4 mr-2" />
+                  {project.status || 'Status unknown'}
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -33,7 +33,18 @@ def run_deployment_pipeline(db: Session, deployment_id: int):
         if not os.path.exists(project_path):
             project_path = os.path.join("/tmp", project.name)
             
-        build_result = build_project(project_path, deployment_id)
+        from app.detector.registry import registry
+        adapter, extracted_info = registry.detect(project_path)
+        if not adapter:
+            raise RuntimeError("Framework detection failed before build")
+
+        build_result = build_project(
+            project_path=project_path,
+            project_id=str(project.id),
+            deployment_id=str(deployment_id),
+            adapter_name=adapter.name,
+            extracted_info=extracted_info
+        )
         if build_result.get("status") == "failed":
             raise RuntimeError(f"Build failed: {build_result.get('error')}")
             

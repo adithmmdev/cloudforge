@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from app.deployer.pipeline import run_deployment_pipeline
+from app.deployer.deploy import run_deployment_pipeline
 from app.models.deployment import Deployment
 from app.models.project import Project
 from app.models.instance import Instance
@@ -10,13 +10,18 @@ def mock_db():
     db = MagicMock()
     return db
 
-@patch("app.deployer.pipeline.provision_instance")
-@patch("app.deployer.pipeline.build_project")
-@patch("app.deployer.pipeline.subprocess.Popen")
-@patch("app.deployer.pipeline.paramiko.SSHClient")
-@patch("app.deployer.pipeline.os.path.exists")
-def test_successful_deployment(mock_exists, mock_ssh_class, mock_popen, mock_build, mock_provision, mock_db):
+@patch("app.deployer.deploy.provision_instance")
+@patch("app.deployer.deploy.build_project")
+@patch("app.deployer.deploy.subprocess.Popen")
+@patch("app.deployer.deploy.paramiko.SSHClient")
+@patch("app.deployer.deploy.os.path.exists")
+@patch("app.detector.registry.registry.detect")
+def test_successful_deployment(mock_detect, mock_exists, mock_ssh_class, mock_popen, mock_build, mock_provision, mock_db):
     mock_exists.return_value = True
+    
+    mock_adapter = MagicMock()
+    mock_adapter.name = "single_container"
+    mock_detect.return_value = (mock_adapter, {})
     
     mock_deployment = Deployment(id=1, project_id=10, status='pending', deployment_type='single_container')
     mock_project = Project(id=10, name="test_proj")
@@ -63,13 +68,18 @@ def test_successful_deployment(mock_exists, mock_ssh_class, mock_popen, mock_bui
     assert mock_popen.call_count == 2
     assert mock_ssh.exec_command.called
 
-@patch("app.deployer.pipeline.provision_instance")
-@patch("app.deployer.pipeline.build_project")
-@patch("app.deployer.pipeline.subprocess.Popen")
-@patch("app.deployer.pipeline.paramiko.SSHClient")
-@patch("app.deployer.pipeline.os.path.exists")
-def test_build_failure(mock_exists, mock_ssh_class, mock_popen, mock_build, mock_provision, mock_db):
+@patch("app.deployer.deploy.provision_instance")
+@patch("app.deployer.deploy.build_project")
+@patch("app.deployer.deploy.subprocess.Popen")
+@patch("app.deployer.deploy.paramiko.SSHClient")
+@patch("app.deployer.deploy.os.path.exists")
+@patch("app.detector.registry.registry.detect")
+def test_build_failure(mock_detect, mock_exists, mock_ssh_class, mock_popen, mock_build, mock_provision, mock_db):
     mock_exists.return_value = True
+    
+    mock_adapter = MagicMock()
+    mock_adapter.name = "single_container"
+    mock_detect.return_value = (mock_adapter, {})
     
     mock_deployment = Deployment(id=2, project_id=11, status='pending', deployment_type='single_container')
     mock_project = Project(id=11, name="fail_proj")

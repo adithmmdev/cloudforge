@@ -31,13 +31,25 @@
   "in_progress_task": {
     "task": "E2E Runtime Validation",
     "started_at": "2026-08-17T22:00:00Z",
-    "files_modified": [],
+    "files_modified": [
+      "backend/alembic/versions/8f88de6fd0d6_initial_migration.py",
+      "backend/app/models/failure.py",
+      "backend/app/api/projects.py",
+      "backend/app/deployer/deploy.py",
+      "backend/app/orchestrator/loop.py",
+      "frontend/package.json",
+      "frontend/src/pages/Dashboard.jsx"
+    ],
     "files_remaining": [],
     "blockers": [],
     "decisions_made": [
       "Fixed incorrect schema references in API",
       "Fixed jinja template absolute paths in test suite",
-      "Corrected Nginx proxy for frontend API calls"
+      "Corrected Nginx proxy for frontend API calls",
+      "Remediated forensic audit defects: Fixed Failure db schema & admin seed.",
+      "Fixed pipeline.py renaming to deploy.py and build_project signature.",
+      "Fixed orchestrator loop missing wiring.",
+      "Fixed frontend package.json versions and removed mock Dashboard data."
     ]
   },
   "pending_tasks": [

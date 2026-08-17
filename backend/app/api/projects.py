@@ -28,7 +28,7 @@ async def upload_project(file: UploadFile = File(...), db: Session = Depends(get
 
         
     # Create DB entry
-    from app.detector import registry
+    from app.detector.registry import registry
     adapter, _ = registry.detect(extract_path)
     framework = adapter.name if adapter else "unknown"
     
@@ -71,7 +71,7 @@ def update_autonomy(project_id: int, req: AutonomyUpdate, db: Session = Depends(
     db.commit()
     return {"status": "ok"}
 
-from app.deployer.pipeline import run_deployment_pipeline
+from app.orchestrator.loop import run_orchestration_loop
 from fastapi import BackgroundTasks
 @router.post("/{project_id}/deploy")
 def trigger_deploy(project_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
@@ -85,11 +85,11 @@ def trigger_deploy(project_id: int, background_tasks: BackgroundTasks, db: Sessi
     db.commit()
     db.refresh(deployment)
     
-    background_tasks.add_task(run_deployment_pipeline, db, deployment.id)
+    background_tasks.add_task(run_orchestration_loop, db, deployment.id)
     return {"deployment_id": deployment.id, "status": "pending"}
 
 @router.get("/{project_id}/deployments")
 def get_deployments(project_id: int, db: Session = Depends(get_db)):
-    deployments = db.query(Deployment).filter(Deployment.project_id == project_id).order_by(Deployment.created_at.desc()).all()
-    return [{"id": d.id, "status": d.status, "deployment_type": d.deployment_type, "created_at": d.created_at} for d in deployments]
+    deployments = db.query(Deployment).filter(Deployment.project_id == project_id).order_by(Deployment.started_at.desc()).all()
+    return [{"id": d.id, "status": d.status, "deployment_type": d.deployment_type, "started_at": d.started_at} for d in deployments]
 

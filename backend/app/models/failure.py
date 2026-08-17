@@ -7,8 +7,9 @@ class Failure(Base):
     __tablename__ = 'failures'
     id = Column(Integer, primary_key=True)
     deployment_id = Column(Integer, ForeignKey('deployments.id', ondelete='CASCADE'))
-    raw_error_excerpt = Column(String)
+    error_message = Column(String)
     error_class = Column(String)
+    extracted_token = Column(String)
     detected_at = Column(DateTime(timezone=True), server_default=func.now())
     
     deployment = relationship("Deployment", back_populates="failures")

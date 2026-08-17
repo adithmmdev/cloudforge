@@ -8,7 +8,7 @@ from app.models.autonomy_setting import AutonomySetting
 from app.models.failure import Failure
 from app.models.diagnosis import Diagnosis
 from app.models.remediation_action import RemediationAction
-from app.deployer.pipeline import run_deployment_pipeline
+from app.deployer.deploy import run_deployment_pipeline
 from app.remediation.classifier import classify_error
 from app.remediation.redactor import create_redacted_signature
 from app.remediation.local_llm import get_remediation_action as get_local_action
