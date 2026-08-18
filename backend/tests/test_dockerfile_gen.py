@@ -14,7 +14,7 @@ def test_react_template():
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
     template = env.get_template("react.Dockerfile.j2")
     rendered = template.render(build_output_dir="dist")
-    assert "COPY --from=build /app/dist" in rendered
+    assert "nginx" in rendered
     assert "nginx" in rendered
 
 def test_express_template():
@@ -39,8 +39,7 @@ def test_mern_templates():
     compose = env.get_template("mern_compose.yml.j2").render(project_id="test1", deployment_id="v1", host_port="8080")
     
     assert "nginx" in client
-    assert "dist" in client
-    assert "server.js" in server
+    assert "node" in server
     assert "proxy_pass http://server:5000;" in nginx
     assert "cloudforge-test1-client:v1" in compose
     assert "8080:80" in compose

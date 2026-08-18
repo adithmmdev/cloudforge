@@ -18,17 +18,15 @@ def build_project(project_path: str, project_id: str, deployment_id: str, adapte
         # 1. Write .dockerignore
         render_template_to_file("dockerignore.j2", os.path.join(project_path, ".dockerignore"))
         
-        # 2. Write Dockerfile(s) and cf_entrypoint.sh
+        # 2. Write Dockerfile(s)
         if adapter_name == "mern":
             # Client
             client_info = extracted_info.get("client", {})
             render_template_to_file("mern_client.Dockerfile.j2", os.path.join(project_path, "client", "Dockerfile"), **client_info)
             render_template_to_file("mern_nginx.conf.j2", os.path.join(project_path, "client", "nginx.conf"))
-            render_template_to_file("cf_entrypoint.sh.j2", os.path.join(project_path, "client", "cf_entrypoint.sh"), is_react_build="true")
             # Server
             server_info = extracted_info.get("server", {})
             render_template_to_file("mern_server.Dockerfile.j2", os.path.join(project_path, "server", "Dockerfile"), **server_info)
-            render_template_to_file("cf_entrypoint.sh.j2", os.path.join(project_path, "server", "cf_entrypoint.sh"))
             # Compose
             render_template_to_file("mern_compose.yml.j2", os.path.join(project_path, "docker-compose.yml"), project_id=project_id, deployment_id=deployment_id, host_port=extracted_info.get("host_port", "80"))
             
@@ -46,11 +44,7 @@ def build_project(project_path: str, project_id: str, deployment_id: str, adapte
             if not template_name:
                 raise ValueError(f"Unknown adapter {adapter_name}")
             
-            is_react_build = "true" if adapter_name == "react" else "false"
-            is_python = "true" if adapter_name in ["fastapi", "flask"] else "false"
-            
             render_template_to_file(template_name, os.path.join(project_path, "Dockerfile"), **extracted_info)
-            render_template_to_file("cf_entrypoint.sh.j2", os.path.join(project_path, "cf_entrypoint.sh"), is_react_build=is_react_build, is_python=is_python)
             
         with open(marker_file, "w") as f:
             f.write("built")

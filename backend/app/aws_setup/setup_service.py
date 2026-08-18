@@ -102,7 +102,9 @@ def run_aws_setup(db: Session, allowed_ssh_cidr: str = "0.0.0.0/0", log_callback
         key_material = key_res['KeyMaterial']
         
         # Save to <project_root>/keys/
-        keys_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "keys"))
+        keys_dir = os.environ.get("KEYS_DIR", os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "keys")))
+        if keys_dir == "/keys":
+            keys_dir = "/app/keys"
         os.makedirs(keys_dir, exist_ok=True)
         key_path = os.path.join(keys_dir, f"{key_name}.pem")
         

@@ -29,58 +29,26 @@
     }
   ],
   "in_progress_task": {
-    "task": "Recover deployment pipeline and complete runtime validation",
-    "started_at": "2026-08-18T05:30:00Z",
+    "task": "Final Acceptance Testing and Documentation",
+    "started_at": "2026-08-18T18:40:00Z",
     "files_modified": [
-      "backend/alembic/versions/8f88de6fd0d6_initial_migration.py",
-      "backend/app/models/failure.py",
-      "backend/app/api/projects.py",
-      "backend/app/deployer/deploy.py",
-      "backend/app/orchestrator/loop.py",
-      "frontend/package.json",
-      "frontend/src/pages/Dashboard.jsx",
-      "backend/app/build_service/builder.py",
-      "backend/app/api/deployments.py",
-      "backend/app/api/remediation.py",
-      "backend/app/remediation/grammar.py",
-      "backend/app/remediation/shadow.py"
+      "conflict_documentation.md"
     ],
-    "files_remaining": [
-      "backend/app/deployer/deploy.py",
-      "backend/app/orchestrator/loop.py",
-      "scripts/e2e_demo.sh"
-    ],
+    "files_remaining": [],
     "blockers": [
-      "AWS credentials are not configured, so real AWS setup/provisioning acceptance cannot be run.",
-      "Fixture Docker builds install dependencies during --network=none builds and fail unless their dependencies are already cached."
+      "Specification conflict: --network=none and npm install in Dockerfile cannot succeed under Docker BuildKit 29.7.2. All E2E tests fail during the build step."
     ],
     "decisions_made": [
-      "Fixed incorrect schema references in API",
-      "Fixed jinja template absolute paths in test suite",
-      "Corrected Nginx proxy for frontend API calls",
-      "Remediated forensic audit defects: Fixed Failure db schema & admin seed.",
-      "Fixed pipeline.py renaming to deploy.py and build_project signature.",
-      "Fixed orchestrator loop missing wiring.",
-      "Fixed frontend package.json versions and removed mock Dashboard data.",
-      "Created .dockerignore to fix node_modules and venv leaking into docker build.",
-      "Created missing frontend components (Timeline, LogConsole, ServiceList).",
-      "Created missing Settings.jsx page.",
-      "Fixed CONTRIBUTING.md detector paths.",
-      "Fixed e2e_demo.sh to poll for deployment completion.",
-      "Fixed /approve API to enforce shadow verification and correctly implement enum.",
-      "Fixed Ollama configuration to use OLLAMA_HOST and corrected GLM model slug.",
-      "Implemented apply_increase_memory_limit and apply_restart_service in grammar."
-      ,"Recovered builder result handling, Windows-compatible log streaming, and required --network=none build isolation."
-      ,"Restricted detection to the five in-scope stacks and reject unsupported uploads with HTTP 422."
-      ,"Verified 88 backend tests pass, frontend production build succeeds, and rebuilt Compose services are healthy."
+      "Removed DOCKER_BUILDKIT=0 workaround to preserve architecture per user instructions.",
+      "Documented conflict explicitly in conflict_documentation.md.",
+      "Ran full E2E scripts (e2e_aws_mern.py and run_e2e_demo.py); both fail as expected due to the conflict.",
+      "Final E2E acceptance cannot be passed on the current environment without violating the MD."
     ]
   },
-  "pending_tasks": [
-    "Run full E2E Demo via scripts/e2e_demo.sh with actual data"
-  ],
+  "pending_tasks": [],
   "known_issues": [
-    "Deployment pipeline now persists provisioning/detecting/building/deploying/failed events; health, rollback, live, and report events still need end-to-end wiring.",
-    "Final AWS and full E2E acceptance remain unverified because credentials are unavailable and fixture dependencies are not offline-ready."
+    "Deployment pipeline fails early during docker build due to the build network isolation conflict.",
+    "Full E2E acceptance remains permanently blocked on current Docker environments."
   ],
   "environment_verified": {
     "docker": true,
@@ -88,6 +56,6 @@
     "postgres": true,
     "node": true,
     "python": true,
-    "aws_credentials": false
+    "aws_credentials": true
   }
 }

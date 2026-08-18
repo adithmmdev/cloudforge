@@ -1,0 +1,10 @@
+.env
+keys/
+__pycache__/
+*.pyc
+venv/
+.venv/
+node_modules/
+*.zip
+tmp_cache_client/
+tmp_cache_server/

@@ -83,7 +83,9 @@ def run_deployment_pipeline(db: Session, deployment_id: int):
             for image_tag in image_tags:
                 logger.info(f"Deployment {deployment_id}: Transferring image {image_tag}")
                 ssh_cmd = [
-                    "ssh", "-o", "StrictHostKeyChecking=no", "-i", key_path, 
+                    "ssh", "-o", "StrictHostKeyChecking=no",
+                    "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=5",
+                    "-i", key_path, 
                     f"ubuntu@{instance.public_ip}", "docker", "load"
                 ]
                 save_cmd = ["docker", "save", image_tag]
@@ -156,6 +158,12 @@ def run_deployment_pipeline(db: Session, deployment_id: int):
             ssh = paramiko.SSHClient()
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             ssh.connect(instance.public_ip, username='ubuntu', key_filename=key_path)
+            
+            if deployment.deployment_type == 'mern':
+                sftp = ssh.open_sftp()
+                sftp.put(os.path.join(project_path, "docker-compose.yml"), "docker-compose.yml")
+                sftp.close()
+
             stdin, stdout, stderr = ssh.exec_command(run_command)
             
             if stdout.channel.recv_exit_status() != 0:
