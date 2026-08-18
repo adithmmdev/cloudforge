@@ -28,6 +28,16 @@ def run_orchestration_loop(db: Session, deployment_id: int):
         try:
             run_deployment_pipeline(db, deployment_id)
             logger.info(f"Deployment {deployment_id} succeeded on attempt {attempt_number}.")
+            
+            deployment = db.query(Deployment).filter(Deployment.id == deployment_id).first()
+            if deployment and deployment.status == "deployed":
+                deployment.status = "live"
+                db.commit()
+                # Generate report
+                from app.doc_generator.generator import generate_deployment_report
+                generate_deployment_report(db, deployment_id)
+                logger.info(f"Deployment {deployment_id} transitioned to live and report generated.")
+                
             return {"status": "success"}
         except Exception as e:
             logger.error(f"Deployment {deployment_id} failed on attempt {attempt_number}: {e}")
@@ -119,9 +129,11 @@ def run_orchestration_loop(db: Session, deployment_id: int):
             if mode == "approve_each":
                 return {"status": "awaiting_approval", "remediation_action_id": rem_action.id}
                 
-            project_dir = f"/tmp/{project.name}"
+            project_dir = f"/app/uploads/{project.name}"
+            if not os.path.exists(project_dir):
+                project_dir = os.path.join(os.getenv("FIXTURES_DIR", "tests/fixtures"), project.name)
             # Copy to shadow dir to prevent messing up the main dir during test
-            shadow_dir = f"/tmp/shadow_{deployment_id}_{attempt_number}"
+            shadow_dir = f"/app/uploads/shadow_{deployment_id}_{attempt_number}"
             if os.path.exists(shadow_dir):
                 shutil.rmtree(shadow_dir)
             shutil.copytree(project_dir, shadow_dir)

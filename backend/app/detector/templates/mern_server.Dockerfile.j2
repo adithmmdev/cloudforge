@@ -1,7 +1,8 @@
 FROM node:18-slim
 WORKDIR /app
 COPY package*.json ./
-RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install; fi
+COPY .cf_npm_cache/ .cf_npm_cache/
+RUN if [ -f package-lock.json ]; then npm ci --cache .cf_npm_cache --prefer-offline --offline --no-audit; else npm install --cache .cf_npm_cache --prefer-offline --offline --no-audit; fi
 COPY . .
 EXPOSE 5000
 CMD ["node", "{{ entry_file }}"]

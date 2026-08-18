@@ -41,9 +41,9 @@ def run_deployment_pipeline(db: Session, deployment_id: int):
         deployment.status = "building"
         _record_stage(db, deployment, "detecting", "Detecting the uploaded project framework")
         logger.info(f"Deployment {deployment_id}: Building project image")
-        project_path = os.path.join(os.getenv("FIXTURES_DIR", "tests/fixtures"), project.name)
+        project_path = os.path.join("/app/uploads", project.name)
         if not os.path.exists(project_path):
-            project_path = os.path.join("/tmp", project.name)
+            project_path = os.path.join(os.getenv("FIXTURES_DIR", "tests/fixtures"), project.name)
             
         from app.detector.registry import registry
         adapter, extracted_info = registry.detect(project_path)
@@ -76,6 +76,20 @@ def run_deployment_pipeline(db: Session, deployment_id: int):
             
         # Step 3: Transfer Image (skip if local)
         _record_stage(db, deployment, "deploying", "Transferring and starting deployment containers")
+        
+        from app.models.container import Container
+        for img in image_tags:
+            c = Container(
+                deployment_id=deployment.id,
+                service_name=img.split(":")[0],
+                image_tag=img,
+                status="running"
+            )
+            if "client" in img or "react" in img or "express" in img or "fastapi" in img or "flask" in img:
+                c.host_port = 80
+            db.add(c)
+        db.commit()
+        
         if not is_local:
             setup_state = db.query(AWSSetupState).filter_by(setup_status='complete').first()
             key_path = setup_state.ssh_key_path if setup_state else os.getenv("EC2_SSH_KEY_PATH", "keys/cloudforge-key.pem")

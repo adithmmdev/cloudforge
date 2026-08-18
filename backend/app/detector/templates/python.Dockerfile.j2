@@ -1,8 +1,10 @@
 FROM python:3.9-slim
 
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt* pyproject.toml* ./
+COPY .cf_deps/ .cf_deps/
+RUN if [ -f requirements.txt ]; then pip install --no-index --find-links=./.cf_deps -r requirements.txt; \
+    elif [ -f pyproject.toml ]; then pip install --no-index --find-links=./.cf_deps .; fi
 COPY . .
 
 CMD ["python", "{{ entry_file }}"]

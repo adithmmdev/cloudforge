@@ -115,14 +115,6 @@ def generate_deployment_report(db: Session, deployment_id: int):
         })
         
     env_keys = []
-    if deployment.env_vars:
-        import json
-        try:
-            envs = json.loads(deployment.env_vars)
-            env_keys = list(envs.keys())
-        except:
-            pass
-            
     main_port = None
     for c in containers:
         if c.host_port:

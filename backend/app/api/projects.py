@@ -14,12 +14,13 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 @router.post("")
 async def upload_project(file: UploadFile = File(...), db: Session = Depends(get_db)):
     # Task 5.2 Input Validation
-    file_path = f"/tmp/{file.filename}"
+    os.makedirs("/app/uploads", exist_ok=True)
+    file_path = f"/app/uploads/{file.filename}"
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
     project_name = file.filename.replace('.zip', '')
-    extract_path = f"/tmp/{project_name}"
+    extract_path = f"/app/uploads/{project_name}"
     try:
         safe_extract_zip(file_path, extract_path)
     except ZipBombError as e:

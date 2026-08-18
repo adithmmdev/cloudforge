@@ -15,6 +15,8 @@ def run_shadow_verification(db: Session, remediation_action_id: int, project_dir
     
     try:
         if deployment_type == "mern":
+            from app.build_service.builder import materialize_dependencies
+            materialize_dependencies(project_dir, "mern")
             # For MERN, we need to build client and server with limits, then update compose or just use compose build?
             # Actually, we can just run docker build manually for client and server.
             for svc in ["client", "server"]:
@@ -46,6 +48,8 @@ def run_shadow_verification(db: Session, remediation_action_id: int, project_dir
                 tests.append({"name": "run", "passed": False, "output": res.stderr})
                 return False
         else:
+            from app.build_service.builder import materialize_dependencies
+            materialize_dependencies(project_dir, framework)
             img_name = f"shadow_img_{remediation_action_id}"
             res = subprocess.run([
                 "docker", "build", "--network=none", "--memory=2g", "--cpu-quota=100000",

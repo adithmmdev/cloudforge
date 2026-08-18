@@ -74,6 +74,7 @@ application source code — **stop and re-read spec §2.**
 - A user-supplied `Dockerfile` in the uploaded project is **ignored, never built**.
 - All `docker build` commands must include `--network=none` and a 10-minute timeout.
 - Build-time resource limits: `--memory=2g --cpu-quota=100000` (1 CPU).
+- **v4.1 Amendment (Offline Dependency Materialization):** To support caching without `--network=none` failures, dependencies are downloaded (using network) into a local bundle (`.cf_npm_cache` or `.cf_deps`) outside of the Docker build. The final Docker build remains strictly `--network=none` and the Dockerfile templates explicitly use the offline bundles (e.g. `npm ci --cache` or `pip install --no-index`).
 
 ### R10 — Never Privileged Containers
 Runtime containers: `--memory=256m --cpus=0.5 --pids-limit=100`. Never `--privileged`, never
