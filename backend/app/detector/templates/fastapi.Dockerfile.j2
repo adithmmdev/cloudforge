@@ -1,8 +1,9 @@
 FROM python:3.12-slim
 WORKDIR /code
 COPY requirements.txt* pyproject.toml* ./
-RUN if [ -f requirements.txt ]; then pip install --no-cache-dir -r requirements.txt; \
-    elif [ -f pyproject.toml ]; then pip install --no-cache-dir .; fi
 COPY . .
+COPY cf_entrypoint.sh /cf_entrypoint.sh
+RUN chmod +x /cf_entrypoint.sh
+ENTRYPOINT ["/cf_entrypoint.sh"]
 EXPOSE 80
 CMD ["uvicorn", "{{ module_path }}:{{ app_var }}", "--host", "0.0.0.0", "--port", "80"]

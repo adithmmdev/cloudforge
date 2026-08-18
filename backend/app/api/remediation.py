@@ -39,9 +39,11 @@ def approve_action(id: int, db: Session = Depends(get_db)):
         
         apply_action(shadow_dir, action.action_type, action.params)
         
-        detect_res = registry.detect(shadow_dir)
-        framework = detect_res.get("framework", "unknown")
-        deployment_type = detect_res.get("deployment_type", "single_container")
+        adapter, _ = registry.detect(shadow_dir)
+        if not adapter:
+            raise RuntimeError("Framework detection failed for shadow project")
+        framework = adapter.name
+        deployment_type = adapter.deployment_type
         
         shadow_success = run_shadow_verification(db, action.id, shadow_dir, deployment_type, framework)
         if not shadow_success:

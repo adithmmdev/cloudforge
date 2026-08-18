@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 def run_shadow_verification(db: Session, remediation_action_id: int, project_dir: str, deployment_type: str, framework: str) -> bool:
     tests = []
     success = True
+    container_name = None
     
     try:
         if deployment_type == "mern":
@@ -40,7 +41,7 @@ def run_shadow_verification(db: Session, remediation_action_id: int, project_dir
                 with open(compose_file, "w") as f:
                     f.write(content)
                     
-            res = subprocess.run(["docker", "compose", "up", "-d"], cwd=project_dir, capture_output=True, text=True)
+            res = subprocess.run(["docker-compose", "up", "-d"], cwd=project_dir, capture_output=True, text=True)
             if res.returncode != 0:
                 tests.append({"name": "run", "passed": False, "output": res.stderr})
                 return False
@@ -55,7 +56,24 @@ def run_shadow_verification(db: Session, remediation_action_id: int, project_dir
                 return False
             
             container_name = f"shadow_cnt_{remediation_action_id}"
-            res = subprocess.run(["docker", "run", "-d", "-P", "--name", container_name, img_name], capture_output=True, text=True)
+            
+            from app.models.remediation_action import RemediationAction
+            rem_action = db.query(RemediationAction).filter(RemediationAction.id == remediation_action_id).first()
+            mem_limit = "256m"
+            restart_policy = ""
+            
+            if rem_action:
+                if rem_action.action_type == "INCREASE_MEMORY_LIMIT":
+                    mem_limit = f"{rem_action.params.get('mb', 512)}m"
+                elif rem_action.action_type == "RESTART_SERVICE":
+                    restart_policy = "--restart always"
+                    
+            cmd = ["docker", "run", "-d", "-P", f"--memory={mem_limit}", "--cpus=0.5", "--pids-limit=100"]
+            if restart_policy:
+                cmd.extend(["--restart", "always"])
+            cmd.extend(["--name", container_name, img_name])
+            
+            res = subprocess.run(cmd, capture_output=True, text=True)
             if res.returncode != 0:
                 tests.append({"name": "run", "passed": False, "output": res.stderr})
                 return False
@@ -65,7 +83,7 @@ def run_shadow_verification(db: Session, remediation_action_id: int, project_dir
         time.sleep(15)
         
         if deployment_type == "mern":
-            res = subprocess.run(["docker", "compose", "ps", "-q"], cwd=project_dir, capture_output=True, text=True)
+            res = subprocess.run(["docker-compose", "ps", "-q"], cwd=project_dir, capture_output=True, text=True)
             if not res.stdout.strip():
                 tests.append({"name": "stay_running_15s", "passed": False, "output": "Containers exited"})
                 success = False
@@ -81,7 +99,7 @@ def run_shadow_verification(db: Session, remediation_action_id: int, project_dir
                 
         if success:
             if deployment_type == "mern":
-                res = subprocess.run(["docker", "compose", "port", "client", "80"], cwd=project_dir, capture_output=True, text=True)
+                res = subprocess.run(["docker-compose", "port", "client", "80"], cwd=project_dir, capture_output=True, text=True)
                 port_mapping = res.stdout.strip()
                 if port_mapping:
                     port = port_mapping.split(":")[-1]
@@ -125,9 +143,8 @@ def run_shadow_verification(db: Session, remediation_action_id: int, project_dir
         tests.append({"name": "exception", "passed": False, "output": str(e)})
     finally:
         if deployment_type == "mern":
-            subprocess.run(["docker", "compose", "down"], cwd=project_dir, capture_output=True)
-        else:
-            container_name = f"shadow_cnt_{remediation_action_id}"
+            subprocess.run(["docker-compose", "down"], cwd=project_dir, capture_output=True)
+        elif container_name:
             subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
             
         for t in tests:

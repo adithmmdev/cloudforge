@@ -60,8 +60,8 @@ def test_successful_deployment(mock_detect, mock_exists, mock_ssh_class, mock_po
     
     res = run_deployment_pipeline(mock_db, deployment_id=1)
     
-    assert res["status"] == "success"
-    assert mock_deployment.status == "success"
+    assert res["status"] == "deployed"
+    assert mock_deployment.status == "deployed"
     assert mock_deployment.instance_id == 5
     assert mock_provision.called
     assert mock_build.called

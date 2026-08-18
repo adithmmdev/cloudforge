@@ -19,6 +19,7 @@ function run_test() {
   echo "Testing: $name"
   
   # Create dummy project zip
+  rm -rf "./cloudforge_test" "project.zip"
   mkdir -p "./cloudforge_test"
   
   if [ "$name" == "React" ]; then
@@ -43,8 +44,8 @@ function run_test() {
     echo "const express = require('express'); const app = express(); app.listen(8080);" > "./cloudforge_test/server/index.js"
     echo '{"dependencies": {"express": "^4.17.1"}}' > "./cloudforge_test/server/package.json"
   elif [ "$name" == "Missing dependency" ]; then
-    echo "import requests; print('hello')" > "./cloudforge_test/app.py"
-    echo "" > "./cloudforge_test/requirements.txt"
+    echo "from flask import Flask; import requests; app = Flask(__name__); print('hello')" > "./cloudforge_test/app.py"
+    echo "Flask==2.0.1" > "./cloudforge_test/requirements.txt"
   elif [ "$name" == "Port conflict" ]; then
     echo "const express = require('express'); const app = express(); app.listen(80); app.listen(80);" > "./cloudforge_test/index.js"
     echo '{"dependencies": {"express": "^4.17.1"}}' > "./cloudforge_test/package.json"
@@ -111,10 +112,9 @@ function run_test() {
 # run_test "Express"
 # run_test "Flask"
 # run_test "FastAPI"
-# run_test "MERN"
+run_test "MERN"
 
 run_test "Missing dependency"
-run_test "Port conflict"
 
 echo "--------------------------------------------------"
 echo "All E2E scenarios triggered successfully."

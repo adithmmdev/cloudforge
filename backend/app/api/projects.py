@@ -30,7 +30,13 @@ async def upload_project(file: UploadFile = File(...), db: Session = Depends(get
     # Create DB entry
     from app.detector.registry import registry
     adapter, _ = registry.detect(extract_path)
-    framework = adapter.name if adapter else "unknown"
+    if not adapter:
+        shutil.rmtree(extract_path, ignore_errors=True)
+        raise HTTPException(
+            status_code=422,
+            detail="unsupported_stack: CloudForge supports React, Express (JavaScript), Flask, FastAPI, and MERN projects.",
+        )
+    framework = adapter.name
     
     project = Project(name=project_name, framework=framework)
     db.add(project)
@@ -42,12 +48,33 @@ async def upload_project(file: UploadFile = File(...), db: Session = Depends(get
     db.commit()
     
     os.remove(file_path)
-    return {"id": project.id, "name": project.name, "framework": project.framework}
+    return {
+        "id": project.id,
+        "project_id": project.id,
+        "name": project.name,
+        "detected_framework": project.framework,
+        "framework": project.framework,
+    }
 
 @router.get("")
 def list_projects(db: Session = Depends(get_db)):
     projects = db.query(Project).all()
-    return [{"id": p.id, "name": p.name, "framework": p.framework} for p in projects]
+    result = []
+    for project in projects:
+        latest = (
+            db.query(Deployment)
+            .filter(Deployment.project_id == project.id)
+            .order_by(Deployment.started_at.desc())
+            .first()
+        )
+        result.append({
+            "id": project.id,
+            "name": project.name,
+            "framework": project.framework,
+            "status": latest.status if latest else project.status,
+            "last_deployment_id": latest.id if latest else None,
+        })
+    return result
 
 @router.get("/{project_id}/autonomy")
 def get_autonomy(project_id: int, db: Session = Depends(get_db)):
@@ -92,4 +119,3 @@ def trigger_deploy(project_id: int, background_tasks: BackgroundTasks, db: Sessi
 def get_deployments(project_id: int, db: Session = Depends(get_db)):
     deployments = db.query(Deployment).filter(Deployment.project_id == project_id).order_by(Deployment.started_at.desc()).all()
     return [{"id": d.id, "status": d.status, "deployment_type": d.deployment_type, "started_at": d.started_at} for d in deployments]
-

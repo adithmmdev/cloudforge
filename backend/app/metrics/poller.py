@@ -57,7 +57,7 @@ def poll_metrics_for_instance(db: Session, instance: Instance):
         
         active_deployments = db.query(Deployment).filter(
             Deployment.instance_id == instance.id,
-            Deployment.status == 'success'
+            Deployment.status == 'deployed'
         ).all()
         
         if not active_deployments:

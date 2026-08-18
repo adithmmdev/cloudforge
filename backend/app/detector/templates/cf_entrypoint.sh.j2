@@ -1,0 +1,50 @@
+#!/bin/sh
+set -e
+
+# Node.js dependencies
+if [ -f package.json ]; then
+    if [ -f package-lock.json ]; then
+        npm ci --omit=dev || npm install
+    else
+        npm install
+    fi
+    
+    # Handle extra packages added by remediation
+    for var in $(env | awk -F= '{print $1}' | grep '^CF_ADD_DEP_' || true); do
+        pkg=$(echo $var | sed 's/CF_ADD_DEP_//')
+        npm install $pkg
+    done
+fi
+
+# Python dependencies
+if [ -f requirements.txt ]; then
+    pip install --no-cache-dir -r requirements.txt || true
+elif [ -f pyproject.toml ]; then
+    pip install --no-cache-dir . || true
+fi
+
+# Ensure ASGI/WSGI servers are installed for Python apps
+if [ "{{ is_python }}" = "true" ]; then
+    pip install --no-cache-dir gunicorn uvicorn || true
+fi
+
+# Handle extra python packages added by remediation
+if [ -f requirements.txt ] || [ -f pyproject.toml ] || [ "{{ is_python }}" = "true" ]; then
+    for var in $(env | awk -F= '{print $1}' | grep '^CF_ADD_DEP_' || true); do
+        pkg=$(echo $var | sed 's/CF_ADD_DEP_//')
+        pip install --no-cache-dir $pkg
+    done
+fi
+
+# Special case for React build
+if [ "{{ is_react_build }}" = "true" ]; then
+    # In Alpine, we need nodejs and npm
+    if ! command -v npm > /dev/null; then
+        apk add --no-cache nodejs npm
+        npm install
+    fi
+    npm run build
+    cp -r build/* /usr/share/nginx/html/ 2>/dev/null || cp -r dist/* /usr/share/nginx/html/ 2>/dev/null || true
+fi
+
+exec "$@"

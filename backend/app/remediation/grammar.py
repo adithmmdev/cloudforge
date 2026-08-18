@@ -20,7 +20,7 @@ def validate_action(deployment_type: str, container_services: list[str], action_
         return True
 
     service = params.get("service", "app" if deployment_type == "single_container" else "")
-    if not service:
+    if not service or service not in container_services:
         return False
         
     if action_type == "ADD_DEPENDENCY":
@@ -81,21 +81,23 @@ def apply_add_dependency(repo_path: str, params: dict):
     service = params.get("service", "")
     target_dir = os.path.join(repo_path, service) if service and service != "app" else repo_path
     package = params.get("package")
+    dockerfile = os.path.join(target_dir, "Dockerfile")
     
-    req_file = os.path.join(target_dir, "requirements.txt")
-    pkg_file = os.path.join(target_dir, "package.json")
-    
-    if os.path.exists(req_file):
-        with open(req_file, "a") as f:
-            f.write(f"\n{package}\n")
-    elif os.path.exists(pkg_file):
-        with open(pkg_file, "r") as f:
-            data = json.load(f)
-        if "dependencies" not in data:
-            data["dependencies"] = {}
-        data["dependencies"][package] = "*"
-        with open(pkg_file, "w") as f:
-            json.dump(data, f, indent=2)
+    if os.path.exists(dockerfile):
+        with open(dockerfile, "r") as f:
+            lines = f.readlines()
+            
+        pkg_env = f"ENV CF_ADD_DEP_{package}=1\n"
+        
+        for i, line in enumerate(lines):
+            if line.startswith("CMD ") or line.startswith("ENTRYPOINT "):
+                lines.insert(i, pkg_env)
+                break
+        else:
+            lines.append(pkg_env)
+            
+        with open(dockerfile, "w") as f:
+            f.writelines(lines)
 
 def apply_change_base_image(repo_path: str, params: dict):
     service = params.get("service", "")
@@ -126,7 +128,7 @@ def apply_expose_port(repo_path: str, params: dict):
             # Insert before CMD or at the end
             lines = content.splitlines()
             for i, line in enumerate(lines):
-                if line.startswith("CMD "):
+                if line.startswith("CMD ") or line.startswith("ENTRYPOINT "):
                     lines.insert(i, f"EXPOSE {port}")
                     break
             else:
@@ -163,7 +165,7 @@ def apply_set_env_var(repo_path: str, params: dict):
         
         # Insert before CMD or at the end
         for i, line in enumerate(lines):
-            if line.startswith("CMD "):
+            if line.startswith("CMD ") or line.startswith("ENTRYPOINT "):
                 lines.insert(i, f"ENV {key}={val}\n")
                 break
         else:
@@ -173,19 +175,54 @@ def apply_set_env_var(repo_path: str, params: dict):
             f.writelines(lines)
 
 def apply_increase_memory_limit(repo_path: str, params: dict):
-    # Write memory limit to a marker file for the deployer/builder to read
     service = params.get("service", "app")
     mb = params.get("mb", 512)
-    marker_file = os.path.join(repo_path, f".cf_mem_limit_{service}")
-    with open(marker_file, "w") as f:
-        f.write(str(mb))
+    compose_file = os.path.join(repo_path, "docker-compose.yml")
+    if os.path.exists(compose_file):
+        with open(compose_file, "r") as f:
+            content = f.read()
+        import re
+        # Look for limits: { memory: 256M... } under the specific service
+        # This is a bit tricky with regex, but we know the structure from template:
+        #   service_name:
+        #     ...
+        #     deploy:
+        #       resources:
+        #         limits: { memory: 256M, cpus: "0.5" }
+        # We can just replace all instances of memory: 256M if we aren't strict, 
+        # but to be safe we should try to replace it only for the target service.
+        # However, our template uses exact spacing.
+        pattern = re.compile(rf"(\s+{service}:\s*.*?limits:\s*{{.*?memory:\s*)\d+[MmGg](.*}})", re.DOTALL)
+        if pattern.search(content):
+            content = pattern.sub(rf"\g<1>{mb}M\g<2>", content)
+        else:
+            # Fallback if specific regex fails, just replace globally (not ideal but works for our simple template)
+            content = re.sub(r'(memory:\s*)\d+[mM]', rf'\g<1>{mb}M', content)
+        
+        with open(compose_file, "w") as f:
+            f.write(content)
 
 def apply_restart_service(repo_path: str, params: dict):
-    # Write a restart marker file to force a restart during deployment
     service = params.get("service", "app")
-    marker_file = os.path.join(repo_path, f".cf_restart_{service}")
-    with open(marker_file, "w") as f:
-        f.write("restart_requested")
+    compose_file = os.path.join(repo_path, "docker-compose.yml")
+    if os.path.exists(compose_file):
+        with open(compose_file, "r") as f:
+            lines = f.readlines()
+        
+        out_lines = []
+        in_service = False
+        for line in lines:
+            out_lines.append(line)
+            if line.startswith(f"  {service}:"):
+                in_service = True
+            elif in_service and line.startswith("  ") and not line.startswith("    "):
+                in_service = False
+                
+            if in_service and line.startswith(f"  {service}:"):
+                out_lines.append("    restart: always\n")
+                
+        with open(compose_file, "w") as f:
+            f.writelines(out_lines)
 
 def apply_none(repo_path: str, params: dict):
     pass
@@ -205,4 +242,3 @@ def apply_action(repo_path: str, action_type: str, params: dict):
         apply_set_env_var(repo_path, params)
     elif action_type == "RESTART_SERVICE":
         apply_restart_service(repo_path, params)
-

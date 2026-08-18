@@ -36,6 +36,7 @@ def test_shadow_verification_single_container_success(mock_get, mock_sleep, mock
     assert calls[0][0][0].passed is True
     assert calls[1][0][0].test_name == "smoke_test"
     assert calls[1][0][0].passed is True
+    assert any(call.args[:3] == (["docker", "rm", "-f", "shadow_cnt_10"],) for call in mock_run.call_args_list)
 
 @patch("app.remediation.shadow.subprocess.run")
 @patch("app.remediation.shadow.time.sleep")

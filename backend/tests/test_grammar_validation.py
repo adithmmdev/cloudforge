@@ -47,6 +47,14 @@ def test_validate_set_env_var():
 def test_validate_restart_service():
     assert validate_action("mern", ["client", "server", "mongo"], "RESTART_SERVICE", {"service": "mongo"}) is True
     assert validate_action("mern", ["client", "server", "mongo"], "RESTART_SERVICE", {"service": "redis"}) is False
+
+def test_rejects_unknown_service_for_scoped_action():
+    assert validate_action(
+        "single_container",
+        ["app"],
+        "SET_ENV_VAR",
+        {"service": "other", "key": "NODE_ENV", "value": "production"},
+    ) is False
     
 def test_invalid_action():
     assert validate_action("single_container", ["app"], "DROP_TABLE", {}) is False

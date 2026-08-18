@@ -8,6 +8,7 @@ from app.models.shadow_test import ShadowTest
 from app.models.metric import Metric
 from app.models.remediation_action import RemediationAction
 from app.models.deployment_report import DeploymentReport
+from app.models.instance import Instance
 
 router = APIRouter(prefix="/deployments", tags=["deployments"])
 
@@ -16,7 +17,27 @@ def get_deployment(id: int, db: Session = Depends(get_db)):
     dep = db.query(Deployment).filter(Deployment.id == id).first()
     if not dep:
         raise HTTPException(404, "Deployment not found")
-    return {"id": dep.id, "project_id": dep.project_id, "status": dep.status, "deployment_type": dep.deployment_type, "created_at": dep.created_at}
+    instance = db.query(Instance).filter(Instance.id == dep.instance_id).first() if dep.instance_id else None
+    services = [{
+        "name": container.service_name,
+        "image_tag": container.image_tag,
+        "host_port": container.host_port,
+        "status": container.status,
+    } for container in dep.containers]
+    public_service = next((service for service in dep.containers if service.host_port), None)
+    app_url = None
+    if instance and instance.public_ip and public_service:
+        app_url = f"http://{instance.public_ip}:{public_service.host_port}"
+    return {
+        "id": dep.id,
+        "project_id": dep.project_id,
+        "status": dep.status,
+        "deployment_type": dep.deployment_type,
+        "started_at": dep.started_at,
+        "finished_at": dep.finished_at,
+        "services": services,
+        "app_url": app_url,
+    }
 
 @router.get("/{id}/diagnoses")
 def get_diagnoses(id: int, db: Session = Depends(get_db)):

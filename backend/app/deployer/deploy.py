@@ -1,6 +1,7 @@
 import os
 import subprocess
 import paramiko
+import time
 from sqlalchemy.orm import Session
 from app.models.deployment import Deployment
 from app.models.project import Project
@@ -136,6 +137,21 @@ def run_deployment_pipeline(db: Session, deployment_id: int):
             res = subprocess.run(run_cmd, capture_output=True, text=True, **kwargs)
             if res.returncode != 0:
                 raise RuntimeError(f"Failed to launch container locally: {res.stderr}")
+                
+            # Wait and check if it crashed immediately
+            time.sleep(15)
+            if deployment.deployment_type == 'mern':
+                check_res = subprocess.run(["docker-compose", "ps", "-q"], cwd=cwd, capture_output=True, text=True)
+                if not check_res.stdout.strip():
+                    logs = subprocess.run(["docker-compose", "logs"], cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True).stdout
+                    raise RuntimeError(f"Containers exited immediately after start. Logs:\n{logs}")
+            else:
+                container_name = f"proj_{project.id}_{deployment_id}"
+                check_res = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", container_name], capture_output=True, text=True)
+                if "true" not in check_res.stdout.lower():
+                    logs = subprocess.run(["docker", "logs", container_name], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True).stdout
+                    subprocess.run(["docker", "rm", "-f", container_name])
+                    raise RuntimeError(f"Container exited immediately after start. Logs:\n{logs}")
         else:
             ssh = paramiko.SSHClient()
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())

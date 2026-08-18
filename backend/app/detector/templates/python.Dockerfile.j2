@@ -1,9 +1,9 @@
-FROM node:18-slim
+FROM python:3.9-slim
+
 WORKDIR /app
-COPY package*.json ./
 COPY . .
 COPY cf_entrypoint.sh /cf_entrypoint.sh
 RUN chmod +x /cf_entrypoint.sh
 ENTRYPOINT ["/cf_entrypoint.sh"]
-EXPOSE 5000
-CMD ["node", "{{ entry_file }}"]
+
+CMD ["python", "{{ entry_file }}"]

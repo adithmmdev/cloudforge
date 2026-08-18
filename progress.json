@@ -1,6 +1,6 @@
 {
-  "last_updated": "2026-08-17T22:00:00Z",
-  "current_phase": "Phase 5: Final Validation & Polish",
+  "last_updated": "2026-08-18T06:10:00Z",
+  "current_phase": "Phase 5: Recovery audit and runtime validation",
   "completed_tasks": [
     {
       "task": "Phase 1: Database & Core Models",
@@ -29,8 +29,8 @@
     }
   ],
   "in_progress_task": {
-    "task": "E2E Runtime Validation",
-    "started_at": "2026-08-17T22:00:00Z",
+    "task": "Recover deployment pipeline and complete runtime validation",
+    "started_at": "2026-08-18T05:30:00Z",
     "files_modified": [
       "backend/alembic/versions/8f88de6fd0d6_initial_migration.py",
       "backend/app/models/failure.py",
@@ -38,10 +38,22 @@
       "backend/app/deployer/deploy.py",
       "backend/app/orchestrator/loop.py",
       "frontend/package.json",
-      "frontend/src/pages/Dashboard.jsx"
+      "frontend/src/pages/Dashboard.jsx",
+      "backend/app/build_service/builder.py",
+      "backend/app/api/deployments.py",
+      "backend/app/api/remediation.py",
+      "backend/app/remediation/grammar.py",
+      "backend/app/remediation/shadow.py"
     ],
-    "files_remaining": [],
-    "blockers": [],
+    "files_remaining": [
+      "backend/app/deployer/deploy.py",
+      "backend/app/orchestrator/loop.py",
+      "scripts/e2e_demo.sh"
+    ],
+    "blockers": [
+      "AWS credentials are not configured, so real AWS setup/provisioning acceptance cannot be run.",
+      "Fixture Docker builds install dependencies during --network=none builds and fail unless their dependencies are already cached."
+    ],
     "decisions_made": [
       "Fixed incorrect schema references in API",
       "Fixed jinja template absolute paths in test suite",
@@ -58,12 +70,18 @@
       "Fixed /approve API to enforce shadow verification and correctly implement enum.",
       "Fixed Ollama configuration to use OLLAMA_HOST and corrected GLM model slug.",
       "Implemented apply_increase_memory_limit and apply_restart_service in grammar."
+      ,"Recovered builder result handling, Windows-compatible log streaming, and required --network=none build isolation."
+      ,"Restricted detection to the five in-scope stacks and reject unsupported uploads with HTTP 422."
+      ,"Verified 88 backend tests pass, frontend production build succeeds, and rebuilt Compose services are healthy."
     ]
   },
   "pending_tasks": [
     "Run full E2E Demo via scripts/e2e_demo.sh with actual data"
   ],
-  "known_issues": [],
+  "known_issues": [
+    "Deployment pipeline now persists provisioning/detecting/building/deploying/failed events; health, rollback, live, and report events still need end-to-end wiring.",
+    "Final AWS and full E2E acceptance remain unverified because credentials are unavailable and fixture dependencies are not offline-ready."
+  ],
   "environment_verified": {
     "docker": true,
     "ollama": true,
