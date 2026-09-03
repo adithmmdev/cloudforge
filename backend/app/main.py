@@ -10,6 +10,7 @@ from app.api.remediation import router as remediation_router
 from app.api.instances import router as instances_router
 from app.api.monitoring import router as monitoring_router
 from app.api.copilot import router as copilot_router
+from app.api.proxy import router as proxy_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -50,3 +51,4 @@ app.include_router(ws_router, prefix="/api")
 app.include_router(instances_router, prefix="/api")
 app.include_router(monitoring_router, prefix="/api")
 app.include_router(copilot_router, prefix="/api")
+app.include_router(proxy_router, prefix="/api")
