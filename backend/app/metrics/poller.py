@@ -53,7 +53,7 @@ def poll_metrics_for_instance(db: Session, instance: Instance):
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     
     try:
-        ssh.connect(instance.public_ip, username='ubuntu', key_filename=key_path)
+        ssh.connect(instance.public_ip, username='ubuntu', key_filename=key_path, timeout=5)
         
         active_deployments = db.query(Deployment).filter(
             Deployment.instance_id == instance.id,
