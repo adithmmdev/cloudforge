@@ -10,14 +10,21 @@ NVIDIA_NIM_BASE_URL = os.getenv('NVIDIA_NIM_BASE_URL', 'https://integrate.api.nv
 NVIDIA_NIM_API_KEY = os.getenv('NVIDIA_NIM_API_KEY', '')
 MODEL = os.getenv('CLOUD_LLM_MODEL_NVIDIA', 'moonshotai/kimi-k3')
 MAX_OUTPUT_TOKENS = int(os.getenv('COPILOT_MAX_OUTPUT_TOKENS', '1200'))
-# On Render (cloud), use 45s. Locally blocked networks will still fall back via the thread timeout.
-REQUEST_TIMEOUT = int(os.getenv('COPILOT_REQUEST_TIMEOUT', '45'))
+# 45s for direct NVIDIA, 90s for proxy (Render cold start + forwarding)
+REQUEST_TIMEOUT = int(os.getenv('COPILOT_REQUEST_TIMEOUT', '90'))
+
+# If the base URL is a Render proxy, we still need to send the auth header
+# so the proxy can forward it to NVIDIA
+_IS_PROXY = 'render.com' in NVIDIA_NIM_BASE_URL or 'onrender.com' in NVIDIA_NIM_BASE_URL
+
+logger.info(f"Kimi client configured: url={NVIDIA_NIM_BASE_URL}, proxy_mode={_IS_PROXY}")
 
 
 def _sync_stream(system_prompt: str, messages: list) -> Generator[str, None, None]:
     """
     Synchronous Kimi streaming call (runs in a thread pool).
     Yields string token chunks.
+    Works in both direct-NVIDIA mode and Render-proxy mode.
     """
     import requests
 
@@ -25,10 +32,13 @@ def _sync_stream(system_prompt: str, messages: list) -> Generator[str, None, Non
         yield '[Cloud AI key not configured. Showing local evidence only.]\n'
         return
 
+    # Always send Auth — proxy forwards it, direct call needs it
     headers = {
         'Authorization': f'Bearer {NVIDIA_NIM_API_KEY}',
         'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
     }
+
     payload = {
         'model': MODEL,
         'messages': [{'role': 'system', 'content': system_prompt}] + messages,
@@ -37,14 +47,18 @@ def _sync_stream(system_prompt: str, messages: list) -> Generator[str, None, Non
         'stream': True,
     }
 
+    endpoint = f'{NVIDIA_NIM_BASE_URL}/chat/completions'
+    logger.info(f"Kimi request to: {endpoint}")
+
     try:
         response = requests.post(
-            f'{NVIDIA_NIM_BASE_URL}/chat/completions',
+            endpoint,
             headers=headers,
             json=payload,
             stream=True,
             timeout=REQUEST_TIMEOUT,
         )
+        logger.info(f"Kimi response status: {response.status_code}")
         if response.status_code == 429:
             yield '\n\n[Rate limit reached. Please wait a moment.]\n'
             return
@@ -52,9 +66,12 @@ def _sync_stream(system_prompt: str, messages: list) -> Generator[str, None, Non
             yield '\n\n[Cloud AI auth error — check NVIDIA_NIM_API_KEY.]\n'
             return
         if response.status_code != 200:
-            yield f'\n\n[Cloud AI unavailable (HTTP {response.status_code}).]\n'
+            body = response.text[:300]
+            logger.error(f"Kimi bad status {response.status_code}: {body}")
+            yield f'\n\n[Cloud AI unavailable (HTTP {response.status_code}). Details: {body[:100]}]\n'
             return
 
+        got_tokens = False
         for line in response.iter_lines():
             if not line:
                 continue
@@ -68,13 +85,20 @@ def _sync_stream(system_prompt: str, messages: list) -> Generator[str, None, Non
                 chunk = json.loads(data)
                 content = chunk['choices'][0]['delta'].get('content', '')
                 if content:
+                    got_tokens = True
                     yield content
             except (json.JSONDecodeError, KeyError, IndexError):
                 continue
 
+        if not got_tokens:
+            logger.warning("Kimi returned 200 but no tokens — possible empty/truncated stream")
+
+    except requests.exceptions.Timeout:
+        logger.error(f"Kimi timed out after {REQUEST_TIMEOUT}s — ISP block or network issue")
+        # Don't yield anything — caller will trigger fallback
+        return
     except Exception as exc:
         logger.warning(f'Kimi stream error ({type(exc).__name__}): {exc}')
-        # Signal to caller that Kimi failed — empty generator
         return
 
 
@@ -96,11 +120,9 @@ async def stream_copilot_async(system_prompt: str, messages: list) -> AsyncGener
         finally:
             loop.call_soon_threadsafe(queue.put_nowait, SENTINEL)
 
-    # Run blocking I/O in a thread
     loop.run_in_executor(None, _producer)
 
-    # Drain queue — timeout is REQUEST_TIMEOUT + buffer
-    total_timeout = REQUEST_TIMEOUT + 5
+    total_timeout = REQUEST_TIMEOUT + 10
     while True:
         try:
             item = await asyncio.wait_for(queue.get(), timeout=total_timeout)
