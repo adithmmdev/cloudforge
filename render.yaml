@@ -1,0 +1,74 @@
+services:
+  - type: web
+    name: cloudforge-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      # ── Database ────────────────────────────────────────────────────────────
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cloudforge-db
+          property: connectionString
+
+      # ── Render runtime ──────────────────────────────────────────────────────
+      - key: PORT
+        value: "10000"
+
+      # ── CORS: allow the local CloudForge frontend ───────────────────────────
+      # Update this to your actual frontend origin if deploying frontend to Render later.
+      - key: ALLOWED_ORIGINS
+        value: "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000"
+
+      # ── Cloud LLM: NVIDIA NIM → Kimi K3 (ONLY cloud fallback, per spec §9) ─
+      - key: CLOUD_LLM_PROVIDER
+        value: nvidia_nim
+      - key: NVIDIA_NIM_BASE_URL
+        value: https://integrate.api.nvidia.com/v1
+      - key: CLOUD_LLM_MODEL_NVIDIA
+        value: moonshotai/kimi-k3
+      # NVIDIA_NIM_API_KEY must be set as a SECRET in the Render dashboard — never in source.
+      - key: NVIDIA_NIM_API_KEY
+        sync: false   # Marks this as a secret — must be set manually in Render dashboard
+
+      # ── Local LLM: Qwen 2.5 Coder via Ollama (unavailable on Render, gracefully degraded) ─
+      - key: OLLAMA_HOST
+        value: "http://localhost:11434"
+      - key: OLLAMA_MODEL
+        value: "qwen2.5-coder:7b-instruct"
+      - key: LOCAL_CONFIDENCE_THRESHOLD
+        value: "0.75"
+
+      # ── Copilot SSE tuning ──────────────────────────────────────────────────
+      # 45s: enough for Kimi K3 to start streaming from NVIDIA NIM
+      - key: COPILOT_REQUEST_TIMEOUT
+        value: "45"
+      - key: COPILOT_MAX_OUTPUT_TOKENS
+        value: "1200"
+
+      # ── AWS (EC2 orchestration — still works from Render) ──────────────────
+      - key: AWS_REGION
+        value: us-east-1
+      - key: EC2_SSH_USER
+        value: ubuntu
+      - key: EC2_INSTANCE_TYPE
+        value: t3.small
+      - key: MAX_EC2_INSTANCES
+        value: "1"
+      - key: PORT_POOL_START
+        value: "8001"
+      - key: PORT_POOL_END
+        value: "8099"
+      # AWS credentials — set as secrets in Render dashboard
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+
+databases:
+  - name: cloudforge-db
+    databaseName: cloudforge
+    user: cloudforge
+    plan: free
