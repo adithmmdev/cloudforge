@@ -8,5 +8,6 @@ paramiko~=3.4.0
 docker~=7.1.0
 Jinja2~=3.1.0
 pytest~=8.0.0
-anthropic
-openai
+requests~=2.31.0
+
+httpx==0.27.0
