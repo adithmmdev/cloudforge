@@ -4,17 +4,22 @@ from app.models.container import Container
 from app.models.deployment import Deployment
 from app.models.instance import Instance
 
+from sqlalchemy import text
+
 PORT_POOL_START = int(os.getenv("PORT_POOL_START", 8000))
 PORT_POOL_END = int(os.getenv("PORT_POOL_END", 9000))
 
 def allocate_port(db: Session, instance_id: int) -> int:
     """Finds the next available port for a given instance."""
+    # Serialize port allocation to prevent race conditions
+    db.execute(text("SELECT pg_advisory_xact_lock(54321)"))
+    
     # Find all ports currently in use on this instance
     used_ports = db.query(Container.host_port).join(
         Deployment, Container.deployment_id == Deployment.id
     ).filter(
         Deployment.instance_id == instance_id,
-        Deployment.status.in_(['success', 'pending', 'rolled_back']),
+        Deployment.status != 'failed',
         Container.host_port.isnot(None)
     ).all()
     

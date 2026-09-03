@@ -1,8 +1,8 @@
-FROM node:18-slim
+FROM node:{{ node_version | default('18') }}-slim
 WORKDIR /app
 COPY package*.json ./
 COPY .cf_npm_cache/ .cf_npm_cache/
-RUN if [ -f package-lock.json ]; then npm ci --cache .cf_npm_cache --prefer-offline --offline --no-audit; else npm install --cache .cf_npm_cache --prefer-offline --offline --no-audit; fi
+RUN if [ -f package-lock.json ]; then npm ci --cache .cf_npm_cache --prefer-offline --offline --no-audit --legacy-peer-deps; else npm install --cache .cf_npm_cache --prefer-offline --offline --no-audit --legacy-peer-deps; fi
 COPY . .
-EXPOSE 5000
+EXPOSE {{ backend_internal_port }}
 CMD ["node", "{{ entry_file }}"]

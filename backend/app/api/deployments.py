@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.deployment import Deployment
@@ -11,6 +11,19 @@ from app.models.deployment_report import DeploymentReport
 from app.models.instance import Instance
 
 router = APIRouter(prefix="/deployments", tags=["deployments"])
+
+@router.get("/{id}/stage-events")
+def get_stage_events(id: int, db: Session = Depends(get_db)):
+    from app.models.stage_event import StageEvent
+    events = db.query(StageEvent).filter(
+        StageEvent.deployment_id == id
+    ).order_by(StageEvent.id.asc()).all()
+    return [{
+        "id": e.id,
+        "stage": e.stage,
+        "detail": e.detail,
+        "created_at": e.created_at.isoformat() if e.created_at else None
+    } for e in events]
 
 @router.get("/{id}")
 def get_deployment(id: int, db: Session = Depends(get_db)):
@@ -38,6 +51,64 @@ def get_deployment(id: int, db: Session = Depends(get_db)):
         "services": services,
         "app_url": app_url,
     }
+
+@router.get("/status/active")
+def get_active_deployments(db: Session = Depends(get_db)):
+    # Include 'live' and 'remediation_proposed' — these are still "active" from the user's perspective
+    active_deps = db.query(Deployment).filter(
+        Deployment.status.in_(['pending', 'building', 'deploying', 'health_check', 'healing', 'live', 'remediation_proposed'])
+    ).all()
+    return [{"id": d.id, "project_id": d.project_id, "status": d.status, "started_at": d.started_at} for d in active_deps]
+
+@router.post("/{id}/cancel")
+def cancel_deployment(id: int, db: Session = Depends(get_db)):
+    dep = db.query(Deployment).filter(Deployment.id == id).first()
+    if not dep:
+        raise HTTPException(404, "Deployment not found")
+    # Only skip deployments that are already in a true terminal state (not 'live' which is still active)
+    if dep.status in ['cancelled', 'failed', 'rolled_back']:
+        return {"message": "Deployment already terminal", "status": dep.status}
+    
+    import datetime
+    from app.models.stage_event import StageEvent
+    dep.status = "cancelled"
+    dep.finished_at = datetime.datetime.utcnow()
+    db.add(StageEvent(deployment_id=dep.id, stage="cancelled", detail="Deployment was manually cancelled"))
+    db.commit()
+    # Provide an event so UI updates immediately
+    import asyncio
+    from app.api.aws_setup import manager
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(manager.broadcast({"type": "deployment_cancelled", "deployment_id": id}))
+    except:
+        pass
+        
+    return {"message": "Deployment cancelled", "id": id}
+
+@router.post("/action/cancel-all")
+def cancel_all_deployments(db: Session = Depends(get_db)):
+    active_deps = db.query(Deployment).filter(Deployment.status.in_(['pending', 'building', 'deploying', 'health_check', 'healing', 'live'])).all()
+    count = 0
+    import datetime
+    from app.models.stage_event import StageEvent
+    for dep in active_deps:
+        dep.status = "cancelled"
+        dep.finished_at = datetime.datetime.utcnow()
+        db.add(StageEvent(deployment_id=dep.id, stage="cancelled", detail="Deployment was manually cancelled via cancel-all"))
+        count += 1
+    db.commit()
+    
+    if count > 0:
+        import asyncio
+        from app.api.aws_setup import manager
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(manager.broadcast({"type": "all_deployments_cancelled", "count": count}))
+        except:
+            asyncio.run(manager.broadcast({"type": "all_deployments_cancelled", "count": count}))
+            
+    return {"message": f"Cancelled {count} deployments", "count": count}
 
 @router.get("/{id}/diagnoses")
 def get_diagnoses(id: int, db: Session = Depends(get_db)):
@@ -79,9 +150,14 @@ def get_shadow_tests(id: int, db: Session = Depends(get_db)):
             })
     return tests
 
+from typing import Optional
+
 @router.get("/{id}/remediation-actions")
-def get_remediation_actions(id: int, db: Session = Depends(get_db)):
-    actions = db.query(RemediationAction).filter(RemediationAction.deployment_id == id).all()
+def get_remediation_actions(id: int, status: Optional[str] = None, db: Session = Depends(get_db)):
+    q = db.query(RemediationAction).filter(RemediationAction.deployment_id == id)
+    if status:
+        q = q.filter(RemediationAction.status == status)
+    actions = q.all()
     return [{
         "id": a.id, "action_type": a.action_type, "params": a.params, "status": a.status
     } for a in actions]
@@ -91,23 +167,99 @@ def get_report(id: int, db: Session = Depends(get_db)):
     report = db.query(DeploymentReport).filter(DeploymentReport.deployment_id == id).first()
     if not report:
         raise HTTPException(404, "Report not found")
-    return {"id": report.id, "markdown_content": report.report_markdown, "generated_at": report.generated_at}
+    return {"id": report.id, "markdown": report.report_markdown, "generated_at": report.generated_at}
 
 @router.get("/{id}/metrics")
-def get_metrics(id: int, db: Session = Depends(get_db)):
+def get_metrics(id: int, since: Optional[str] = None, service: Optional[str] = None, db: Session = Depends(get_db)):
     dep = db.query(Deployment).filter(Deployment.id == id).first()
     if not dep:
         raise HTTPException(404, "Deployment not found")
         
-    metrics_data = {}
-    for container in dep.containers:
-        latest_metric = db.query(Metric).filter(Metric.container_id == container.id).order_by(Metric.timestamp.desc()).first()
-        if latest_metric:
-            metrics_data[container.service_name] = {
-                "cpu_percent": latest_metric.cpu_percent,
-                "mem_usage_mb": latest_metric.mem_usage_mb,
-                "net_in_bytes": latest_metric.net_in_bytes,
-                "net_out_bytes": latest_metric.net_out_bytes,
-                "timestamp": latest_metric.timestamp.isoformat()
-            }
-    return metrics_data
+    container_ids = [c.id for c in dep.containers]
+    if not container_ids:
+        return []
+        
+    q = db.query(Metric).filter(Metric.container_id.in_(container_ids))
+    if since:
+        from dateutil.parser import parse
+        try:
+            since_dt = parse(since)
+            q = q.filter(Metric.timestamp >= since_dt)
+        except Exception:
+            pass
+            
+    metrics = q.order_by(Metric.timestamp.asc()).all()
+    c_map = {c.id: c.service_name for c in dep.containers}
+    
+    results = []
+    for m in metrics:
+        s_name = c_map.get(m.container_id, "unknown")
+        if service and s_name != service:
+            continue
+        results.append({
+            "timestamp": m.timestamp.isoformat(),
+            "cpu_percent": m.cpu_percent,
+            "mem_usage_mb": m.mem_usage_mb,
+            "net_in_bytes": m.net_in_bytes,
+            "net_out_bytes": m.net_out_bytes,
+            "service": s_name
+        })
+    return results
+
+@router.post("/{id}/shadow-manual")
+def manual_shadow_verification(id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    from app.models.remediation_action import RemediationAction
+    from app.models.project import Project
+    from app.models.deployment import Deployment
+    from app.remediation.shadow import run_shadow_verification
+    import shutil
+    import os
+    
+    dep = db.query(Deployment).filter(Deployment.id == id).first()
+    if not dep:
+        raise HTTPException(404, "Deployment not found")
+        
+    project = db.query(Project).filter(Project.id == dep.project_id).first()
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    rem = RemediationAction(
+        deployment_id=dep.id,
+        action_type="MANUAL",
+        params={},
+        status="pending"
+    )
+    db.add(rem)
+    db.commit()
+
+    base_dir = f"/app/uploads/{project.name}"
+    shadow_dir = f"/app/uploads/shadow_manual_{rem.id}"
+    
+    if os.path.exists(shadow_dir):
+        shutil.rmtree(shadow_dir)
+    shutil.copytree(base_dir, shadow_dir)
+
+    framework = project.framework
+    deployment_type = "mern" if framework == "mern" else "single_container"
+
+    def _bg_task():
+        from app.db.session import SessionLocal
+        local_db = SessionLocal()
+        try:
+            success = run_shadow_verification(local_db, rem.id, shadow_dir, deployment_type, framework)
+            r = local_db.query(RemediationAction).filter(RemediationAction.id == rem.id).first()
+            if r:
+                r.status = "promoted" if success else "failed"
+                local_db.commit()
+        finally:
+            local_db.close()
+            # Cleanup
+            try:
+                import subprocess
+                subprocess.run(["docker", "compose", "-p", f"shadow_{rem.id}", "down", "-v", "--remove-orphans"], cwd=shadow_dir)
+                shutil.rmtree(shadow_dir)
+            except Exception:
+                pass
+
+    background_tasks.add_task(_bg_task)
+    return {"status": "started", "remediation_action_id": rem.id}

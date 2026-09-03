@@ -6,21 +6,30 @@ services:
     networks: [cloudforge-net]
     deploy:
       resources:
-        limits: { memory: 256M, cpus: "0.5" }
+        limits: { memory: {{ client.mem_limit | default('256M') }}, cpus: "0.5" }
   server:
     image: cloudforge-{{ project_id }}-server:{{ deployment_id }}
-    expose: ["5000"]
+    expose: ["{{ server.backend_internal_port }}"]
     environment:
-      - MONGO_URI=mongodb://mongo:27017/app
-    depends_on: [mongo]
+      - {{ server.mongo_config.env_var }}=mongodb://mongo:27017/{{ server.mongo_config.db_name }}{% if server.mongo_config.options %}?{{ server.mongo_config.options }}{% endif %}
+      - PORT={{ server.backend_internal_port }}
+    depends_on:
+      mongo:
+        condition: service_healthy
     networks: [cloudforge-net]
     deploy:
       resources:
-        limits: { memory: 256M, cpus: "0.5" }
+        limits: { memory: {{ server.mem_limit | default('256M') }}, cpus: "0.5" }
   mongo:
     image: mongo:7
     volumes: ["mongo-data:/data/db"]
     networks: [cloudforge-net]
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
     deploy:
       resources:
         limits: { memory: 256M, cpus: "0.5" }

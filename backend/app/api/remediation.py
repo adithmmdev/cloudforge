@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.remediation_action import RemediationAction
@@ -9,8 +9,50 @@ import logging
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/remediation-actions", tags=["remediation"])
 
+def _run_shadow_and_promote(db, action_id, project_dir, deployment, deployment_type, framework):
+    from app.remediation.grammar import apply_action
+    from app.remediation.shadow import run_shadow_verification
+    import shutil, os, time
+    from app.orchestrator.loop import run_orchestration_loop
+    
+    try:
+        action = db.query(RemediationAction).filter(RemediationAction.id == action_id).first()
+        if not action: return
+        
+        shadow_dir = f"/app/uploads/shadow_manual_{deployment.id}_{action.id}"
+        if os.path.exists(shadow_dir):
+            shutil.rmtree(shadow_dir)
+        shutil.copytree(project_dir, shadow_dir)
+        
+        # Apply the proposed fix to the shadow dir
+        apply_action(shadow_dir, action.action_type, action.params)
+        
+        # Run shadow test
+        shadow_success = run_shadow_verification(db, action.id, shadow_dir, deployment_type, framework)
+        
+        if not shadow_success:
+            action.status = "discarded"
+            db.commit()
+            return
+            
+        # If shadow passes, apply to main dir and promote
+        apply_action(project_dir, action.action_type, action.params)
+        action.status = "promoted"
+        deployment.status = "pending"
+        db.commit()
+        
+        # Restart the deployment orchestrator loop for the promoted code
+        run_orchestration_loop(db, deployment.id)
+        
+    except Exception as e:
+        logger.error(f"Background shadow test failed: {e}")
+        action = db.query(RemediationAction).filter(RemediationAction.id == action_id).first()
+        if action:
+            action.status = "discarded"
+            db.commit()
+
 @router.post("/{id}/approve")
-def approve_action(id: int, db: Session = Depends(get_db)):
+def approve_action(id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     action = db.query(RemediationAction).filter(RemediationAction.id == id).first()
     if not action:
         raise HTTPException(404, "Remediation action not found")
@@ -23,44 +65,19 @@ def approve_action(id: int, db: Session = Depends(get_db)):
     
     deployment = db.query(Deployment).filter(Deployment.id == action.deployment_id).first()
     project = db.query(Project).filter(Project.id == deployment.project_id).first()
-    project_dir = f"/tmp/{project.name}"
+    project_dir = f"/app/uploads/{project.name}"
     
-    import shutil, os
-    from app.remediation.grammar import apply_action
-    from app.remediation.shadow import run_shadow_verification
     from app.detector.registry import registry
+    adapter, _ = registry.detect(project_dir)
+    if not adapter:
+        raise HTTPException(500, "Could not detect framework")
+        
+    background_tasks.add_task(
+        _run_shadow_and_promote, 
+        db, action.id, project_dir, deployment, adapter.deployment_type, adapter.name
+    )
     
-    try:
-        # Run shadow test before applying
-        shadow_dir = f"/tmp/shadow_manual_{deployment.id}_{action.id}"
-        if os.path.exists(shadow_dir):
-            shutil.rmtree(shadow_dir)
-        shutil.copytree(project_dir, shadow_dir)
-        
-        apply_action(shadow_dir, action.action_type, action.params)
-        
-        adapter, _ = registry.detect(shadow_dir)
-        if not adapter:
-            raise RuntimeError("Framework detection failed for shadow project")
-        framework = adapter.name
-        deployment_type = adapter.deployment_type
-        
-        shadow_success = run_shadow_verification(db, action.id, shadow_dir, deployment_type, framework)
-        if not shadow_success:
-            action.status = "discarded"
-            db.commit()
-            return {"status": "error", "message": "Shadow test failed. Action discarded."}
-        
-        # If shadow passes, apply to main dir and promote
-        apply_action(project_dir, action.action_type, action.params)
-        action.status = "promoted"
-        db.commit()
-        return {"status": "ok", "message": "Action promoted and applied"}
-    except Exception as e:
-        logger.error(f"Failed to apply action {id}: {e}")
-        action.status = "discarded"
-        db.commit()
-        raise HTTPException(500, f"Failed to apply action: {e}")
+    return {"status": "ok", "message": "Shadow test started in background"}
 
 @router.post("/{id}/reject")
 def reject_action(id: int, db: Session = Depends(get_db)):

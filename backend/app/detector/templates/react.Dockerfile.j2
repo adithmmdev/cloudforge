@@ -1,4 +1,4 @@
-FROM node:18-slim AS build
+FROM node:{{ node_version | default('18') }}-slim AS build
 WORKDIR /app
 COPY package*.json ./
 COPY .cf_npm_cache/ .cf_npm_cache/

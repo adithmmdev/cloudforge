@@ -16,6 +16,38 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+import json
+import re
+
+def get_node_version(target_dir):
+    try:
+        pkg_path = os.path.join(target_dir, "package.json")
+        if os.path.exists(pkg_path):
+            with open(pkg_path, "r") as f:
+                data = json.load(f)
+                node_engine = data.get("engines", {}).get("node", "")
+                if node_engine:
+                    match = re.search(r'(\d+)', node_engine)
+                    if match: return match.group(1)
+                
+                # Check for react-router version >= 7 which strictly requires node 20
+                deps = data.get("dependencies", {})
+                dev_deps = data.get("devDependencies", {})
+                all_deps = {**deps, **dev_deps}
+                
+                rr = all_deps.get("react-router", "") or all_deps.get("react-router-dom", "")
+                if rr:
+                    match = re.search(r'(\d+)', rr)
+                    if match and int(match.group(1)) >= 7: return "20"
+                
+                types_node = all_deps.get("@types/node", "")
+                if types_node:
+                    match = re.search(r'(\d+)', types_node)
+                    if match: return match.group(1)
+    except Exception:
+        pass
+    return "18"
+
 def materialize_dependencies(project_path: str, adapter_name: str, log_callback=None):
     if log_callback:
         log_callback("Materializing dependencies...")
@@ -26,13 +58,25 @@ def materialize_dependencies(project_path: str, adapter_name: str, log_callback=
     volume_workdir = f"/app/uploads/{rel_path}"
 
     def run_materialize(cmd):
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
-        for line in process.stdout:
+        for attempt in range(3):
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+            last_lines = []
+            for line in process.stdout:
+                line_str = line.strip()
+                last_lines.append(line_str)
+                if len(last_lines) > 20: last_lines.pop(0)
+                if log_callback:
+                    log_callback(f"[materialize] {line_str}")
+            process.wait()
+            if process.returncode == 0:
+                return
             if log_callback:
-                log_callback(f"[materialize] {line.strip()}")
-        process.wait()
-        if process.returncode != 0:
-            raise RuntimeError(f"Dependency materialization failed with code {process.returncode}")
+                log_callback(f"[materialize] Attempt {attempt+1} failed with code {process.returncode}")
+            import time
+            time.sleep(2)
+            
+        error_details = "\n".join(last_lines)
+        raise RuntimeError(f"Dependency materialization failed with code {process.returncode} after 3 attempts.\nOutput:\n{error_details}")
 
     if adapter_name in ["fastapi", "flask", "python"]:
         cmd = [
@@ -43,36 +87,39 @@ def materialize_dependencies(project_path: str, adapter_name: str, log_callback=
         ]
         run_materialize(cmd)
     elif adapter_name in ["react", "express"]:
+        node_version = get_node_version(project_path)
         cmd = [
             "docker", "run", "--rm", "--network=default",
             "-v", "cloud_forge_uploads:/app/uploads", "-w", volume_workdir,
-            "node:18-slim", "sh", "-c",
-            "if [ -f package-lock.json ]; then npm ci --cache .cf_npm_cache && rm -rf node_modules; elif [ -f package.json ]; then npm install --cache .cf_npm_cache && rm -rf node_modules; fi"
+            f"node:{node_version}-slim", "sh", "-c",
+            "if [ -f package-lock.json ]; then (npm ci --cache .cf_npm_cache --legacy-peer-deps || npm install --cache .cf_npm_cache --legacy-peer-deps) && rm -rf node_modules; elif [ -f package.json ]; then npm install --cache .cf_npm_cache --legacy-peer-deps && rm -rf node_modules; fi"
         ]
         run_materialize(cmd)
     elif adapter_name == "mern":
         client_dir = f"{volume_workdir}/client"
+        client_node_version = get_node_version(os.path.join(project_path, "client"))
         cmd1 = [
             "docker", "run", "--rm", "--network=default",
             "-v", "cloud_forge_uploads:/app/uploads", "-w", client_dir,
-            "node:18-slim", "sh", "-c",
-            "if [ -f package-lock.json ]; then npm ci --cache .cf_npm_cache && rm -rf node_modules; elif [ -f package.json ]; then npm install --cache .cf_npm_cache && rm -rf node_modules; fi"
+            f"node:{client_node_version}-slim", "sh", "-c",
+            "if [ -f package-lock.json ]; then (npm ci --cache .cf_npm_cache --legacy-peer-deps || npm install --cache .cf_npm_cache --legacy-peer-deps) && rm -rf node_modules; elif [ -f package.json ]; then npm install --cache .cf_npm_cache --legacy-peer-deps && rm -rf node_modules; fi"
         ]
         run_materialize(cmd1)
         
         server_dir = f"{volume_workdir}/server"
+        server_node_version = get_node_version(os.path.join(project_path, "server"))
         cmd2 = [
             "docker", "run", "--rm", "--network=default",
             "-v", "cloud_forge_uploads:/app/uploads", "-w", server_dir,
-            "node:18-slim", "sh", "-c",
-            "if [ -f package-lock.json ]; then npm ci --cache .cf_npm_cache && rm -rf node_modules; elif [ -f package.json ]; then npm install --cache .cf_npm_cache && rm -rf node_modules; fi"
+            f"node:{server_node_version}-slim", "sh", "-c",
+            "if [ -f package-lock.json ]; then (npm ci --cache .cf_npm_cache --legacy-peer-deps || npm install --cache .cf_npm_cache --legacy-peer-deps) && rm -rf node_modules; elif [ -f package.json ]; then npm install --cache .cf_npm_cache --legacy-peer-deps && rm -rf node_modules; fi"
         ]
         run_materialize(cmd2)
 
 def build_project(project_path: str, project_id: str, deployment_id: str, adapter_name: str, extracted_info: dict, log_callback=None):
     marker_file = os.path.join(project_path, f".cf_built_{deployment_id}")
-    if not os.path.exists(marker_file):
-        materialize_dependencies(project_path, adapter_name, log_callback)
+    # Always re-materialize dependencies in case requirements changed during remediation
+    materialize_dependencies(project_path, adapter_name, log_callback)
     if not os.path.exists(marker_file):
         # 1. Write .dockerignore
         render_template_to_file("dockerignore.j2", os.path.join(project_path, ".dockerignore"))
@@ -81,13 +128,26 @@ def build_project(project_path: str, project_id: str, deployment_id: str, adapte
         if adapter_name == "mern":
             # Client
             client_info = extracted_info.get("client", {})
+            client_info["node_version"] = get_node_version(os.path.join(project_path, "client"))
             render_template_to_file("mern_client.Dockerfile.j2", os.path.join(project_path, "client", "Dockerfile"), **client_info)
-            render_template_to_file("mern_nginx.conf.j2", os.path.join(project_path, "client", "nginx.conf"))
             # Server
             server_info = extracted_info.get("server", {})
+            server_info["node_version"] = get_node_version(os.path.join(project_path, "server"))
+            
+            # memory overrides
+            client_mem_file = os.path.join(project_path, ".cf_mem_limit_client")
+            if os.path.exists(client_mem_file):
+                with open(client_mem_file, "r") as cmf: client_info["mem_limit"] = f"{cmf.read().strip()}M"
+            else: client_info["mem_limit"] = "256M"
+            
+            server_mem_file = os.path.join(project_path, ".cf_mem_limit_server")
+            if os.path.exists(server_mem_file):
+                with open(server_mem_file, "r") as smf: server_info["mem_limit"] = f"{smf.read().strip()}M"
+            else: server_info["mem_limit"] = "256M"
+            render_template_to_file("mern_nginx.conf.j2", os.path.join(project_path, "client", "nginx.conf"), **server_info)
             render_template_to_file("mern_server.Dockerfile.j2", os.path.join(project_path, "server", "Dockerfile"), **server_info)
             # Compose
-            render_template_to_file("mern_compose.yml.j2", os.path.join(project_path, "docker-compose.yml"), project_id=project_id, deployment_id=deployment_id, host_port=extracted_info.get("host_port", "80"))
+            render_template_to_file("mern_compose.yml.j2", os.path.join(project_path, "docker-compose.yml"), project_id=project_id, deployment_id=deployment_id, host_port=extracted_info.get("host_port", "80"), server=server_info, client=client_info)
             
             # Write .dockerignore for subdirectories too
             render_template_to_file("dockerignore.j2", os.path.join(project_path, "client", ".dockerignore"))
@@ -103,6 +163,7 @@ def build_project(project_path: str, project_id: str, deployment_id: str, adapte
             if not template_name:
                 raise ValueError(f"Unknown adapter {adapter_name}")
             
+            extracted_info["node_version"] = get_node_version(project_path)
             render_template_to_file(template_name, os.path.join(project_path, "Dockerfile"), **extracted_info)
             
         with open(marker_file, "w") as f:
@@ -134,8 +195,12 @@ def _run_docker_build(build_ctx: str, image_name: str, log_callback, service: st
         "--memory=2g",
         "--cpu-quota=100000",
         "-t", image_name,
-        "."
     ]
+
+    if service == "client":
+        cmd.extend(["--build-arg", "VITE_API_BASE_URL=/api"])
+
+    cmd.append(".")
 
     process = subprocess.Popen(
         cmd,

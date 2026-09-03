@@ -1,5 +1,8 @@
 from typing import List, Callable, Dict, Any, Optional
 
+class UnsupportedStackError(Exception):
+    pass
+
 class Adapter:
     def __init__(self, name: str, detect_fn: Callable[[str], bool], extract_fn: Callable[[str], Dict[str, Any]], deployment_type: str = "single_container"):
         self.name = name

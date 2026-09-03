@@ -156,3 +156,34 @@ def run_aws_setup(db: Session, allowed_ssh_cidr: str = "0.0.0.0/0", log_callback
     
     log_callback("complete", "AWS Setup finished successfully.")
     return state
+
+def run_aws_teardown(db: Session):
+    state = db.query(AWSSetupState).first()
+    if not state:
+        return
+        
+    ec2 = boto3.client('ec2', region_name=os.getenv("AWS_REGION", "us-east-1"))
+    
+    # Optional: Terminate all instances managed by CloudForge?
+    # We will just delete the SG and KeyPair.
+    if state.security_group_id:
+        try:
+            # We must wait for instances to terminate before deleting SG, but for now we try
+            ec2.delete_security_group(GroupId=state.security_group_id)
+        except Exception as e:
+            pass
+            
+    if state.key_pair_name:
+        try:
+            ec2.delete_key_pair(KeyName=state.key_pair_name)
+        except Exception:
+            pass
+            
+    if state.ssh_key_path and os.path.exists(state.ssh_key_path):
+        try:
+            os.remove(state.ssh_key_path)
+        except Exception:
+            pass
+            
+    db.delete(state)
+    db.commit()

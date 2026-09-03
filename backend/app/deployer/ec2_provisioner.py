@@ -66,22 +66,36 @@ def provision_instance(db: Session, max_instances: int = None) -> Instance:
     db.flush()
     
     # 3. REUSE
-    running_inst = next((i for i in db_map.values() if i.status == 'running'), None)
-    if running_inst:
-        _wait_for_readiness(running_inst, db)
-        return running_inst
+    active_inst = next((i for i in db_map.values() if i.status in ('running', 'pending')), None)
+    if active_inst:
+        if active_inst.status == 'pending':
+            db.commit()
+            _wait_for_running(ec2, active_inst.aws_instance_id)
+            updated_aws = ec2.describe_instances(InstanceIds=[active_inst.aws_instance_id])
+            inst_data = updated_aws['Reservations'][0]['Instances'][0]
+            active_inst.status = 'running'
+            active_inst.public_ip = inst_data.get('PublicIpAddress')
+            db.commit()
+        else:
+            db.commit()
+            
+        _wait_for_readiness(active_inst, db)
+        return active_inst
         
     # 4. RESTART
     stopped_inst = next((i for i in db_map.values() if i.status == 'stopped'), None)
     if stopped_inst:
         ec2.start_instances(InstanceIds=[stopped_inst.aws_instance_id])
+        stopped_inst.status = 'pending'
+        db.commit()
+        
         _wait_for_running(ec2, stopped_inst.aws_instance_id)
         
         updated_aws = ec2.describe_instances(InstanceIds=[stopped_inst.aws_instance_id])
         inst_data = updated_aws['Reservations'][0]['Instances'][0]
         stopped_inst.status = 'running'
         stopped_inst.public_ip = inst_data.get('PublicIpAddress')
-        db.flush()
+        db.commit()
         
         _wait_for_readiness(stopped_inst, db)
         return stopped_inst
@@ -126,14 +140,18 @@ def provision_instance(db: Session, max_instances: int = None) -> Instance:
     create_res = ec2.run_instances(**run_kwargs)
     new_aws_id = create_res['Instances'][0]['InstanceId']
     
+    new_inst = Instance(aws_instance_id=new_aws_id, status='pending')
+    db.add(new_inst)
+    db.commit()
+    
     _wait_for_running(ec2, new_aws_id)
     
     updated_aws = ec2.describe_instances(InstanceIds=[new_aws_id])
     inst_data = updated_aws['Reservations'][0]['Instances'][0]
     
-    new_inst = Instance(aws_instance_id=new_aws_id, status='running', public_ip=inst_data.get('PublicIpAddress'))
-    db.add(new_inst)
-    db.flush()
+    new_inst.status = 'running'
+    new_inst.public_ip = inst_data.get('PublicIpAddress')
+    db.commit()
     
     _wait_for_readiness(new_inst, db)
     return new_inst
@@ -148,7 +166,7 @@ def _wait_for_running(ec2, instance_id, timeout=120):
         time.sleep(5)
     raise RuntimeError(f"Timeout waiting for instance {instance_id} to run")
 
-def _wait_for_readiness(instance: Instance, db: Session, timeout=120):
+def _wait_for_readiness(instance: Instance, db: Session, timeout=600):
     if not instance.public_ip:
         raise RuntimeError("No public IP available for readiness check")
         
@@ -172,8 +190,9 @@ def _wait_for_readiness(instance: Instance, db: Session, timeout=120):
                     ssh.close()
                     return
             ssh.close()
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"SSH readiness check failed: {e}")
         time.sleep(5)
         
     raise RuntimeError("Timeout waiting for EC2 readiness (bootstrap/docker)")

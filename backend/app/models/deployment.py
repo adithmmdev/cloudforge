@@ -10,6 +10,9 @@ class Deployment(Base):
     instance_id = Column(Integer, ForeignKey('instances.id', ondelete='SET NULL'))
     deployment_type = Column(String, nullable=False, default='single_container')
     status = Column(String)
+    health_check_result = Column(String)
+    health_check_ms = Column(Integer)
+    health_check_method = Column(String)
     started_at = Column(DateTime(timezone=True), server_default=func.now())
     finished_at = Column(DateTime(timezone=True))
     

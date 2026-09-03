@@ -6,10 +6,21 @@ from sqlalchemy.orm import Session
 from app.models.shadow_test import ShadowTest
 import logging
 
+def log_test(db, action_id, name, passed, output):
+    from app.models.shadow_test import ShadowTest
+    st = ShadowTest(
+        remediation_action_id=action_id,
+        test_name=name,
+        passed=passed,
+        output=str(output)[:4000] if output else ""
+    )
+    db.add(st)
+    db.commit()
+
+
 logger = logging.getLogger(__name__)
 
 def run_shadow_verification(db: Session, remediation_action_id: int, project_dir: str, deployment_type: str, framework: str) -> bool:
-    tests = []
     success = True
     container_name = None
     
@@ -28,8 +39,10 @@ def run_shadow_verification(db: Session, remediation_action_id: int, project_dir
                         "-t", img_name, "."
                     ], cwd=svc_dir, capture_output=True, text=True)
                     if res.returncode != 0:
-                        tests.append({"name": f"build_{svc}", "passed": False, "output": res.stderr})
+                        log_test(db, remediation_action_id, f"build_{svc}", False, res.stderr)
                         return False
+                    else:
+                        log_test(db, remediation_action_id, f"build_{svc}", True, f"Image {img_name} built")
                         
             # Now we need to start them. The easiest is to replace image names in docker-compose.yml
             compose_file = os.path.join(project_dir, "docker-compose.yml")
@@ -43,10 +56,12 @@ def run_shadow_verification(db: Session, remediation_action_id: int, project_dir
                 with open(compose_file, "w") as f:
                     f.write(content)
                     
-            res = subprocess.run(["docker-compose", "up", "-d"], cwd=project_dir, capture_output=True, text=True)
+            res = subprocess.run(["docker", "compose", "-p", f"shadow_{remediation_action_id}", "up", "-d"], cwd=project_dir, capture_output=True, text=True)
             if res.returncode != 0:
-                tests.append({"name": "run", "passed": False, "output": res.stderr})
+                log_test(db, remediation_action_id, "run", False, res.stderr)
                 return False
+            else:
+                log_test(db, remediation_action_id, "run", True, "Containers started")
         else:
             from app.build_service.builder import materialize_dependencies
             materialize_dependencies(project_dir, framework)
@@ -56,8 +71,10 @@ def run_shadow_verification(db: Session, remediation_action_id: int, project_dir
                 "-t", img_name, "."
             ], cwd=project_dir, capture_output=True, text=True)
             if res.returncode != 0:
-                tests.append({"name": "build", "passed": False, "output": res.stderr})
+                log_test(db, remediation_action_id, "build", False, res.stderr)
                 return False
+            else:
+                log_test(db, remediation_action_id, "build", True, f"Image {img_name} built")
             
             container_name = f"shadow_cnt_{remediation_action_id}"
             
@@ -79,31 +96,33 @@ def run_shadow_verification(db: Session, remediation_action_id: int, project_dir
             
             res = subprocess.run(cmd, capture_output=True, text=True)
             if res.returncode != 0:
-                tests.append({"name": "run", "passed": False, "output": res.stderr})
+                log_test(db, remediation_action_id, "run", False, res.stderr)
                 return False
+            else:
+                log_test(db, remediation_action_id, "run", True, "Containers started")
 
 
         # Wait for container to settle
         time.sleep(15)
         
         if deployment_type == "mern":
-            res = subprocess.run(["docker-compose", "ps", "-q"], cwd=project_dir, capture_output=True, text=True)
+            res = subprocess.run(["docker", "compose", "-p", f"shadow_{remediation_action_id}", "ps", "-q"], cwd=project_dir, capture_output=True, text=True)
             if not res.stdout.strip():
-                tests.append({"name": "stay_running_15s", "passed": False, "output": "Containers exited"})
+                log_test(db, remediation_action_id, "stay_running_15s", False, "Containers exited")
                 success = False
             else:
-                tests.append({"name": "stay_running_15s", "passed": True, "output": "Running"})
+                log_test(db, remediation_action_id, "stay_running_15s", True, "Running")
         else:
             res = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", container_name], capture_output=True, text=True)
             if "true" not in res.stdout.lower():
-                tests.append({"name": "stay_running_15s", "passed": False, "output": "Container exited"})
+                log_test(db, remediation_action_id, "stay_running_15s", False, "Container exited")
                 success = False
             else:
-                tests.append({"name": "stay_running_15s", "passed": True, "output": "Running"})
+                log_test(db, remediation_action_id, "stay_running_15s", True, "Running")
                 
         if success:
             if deployment_type == "mern":
-                res = subprocess.run(["docker-compose", "port", "client", "80"], cwd=project_dir, capture_output=True, text=True)
+                res = subprocess.run(["docker", "compose", "-p", f"shadow_{remediation_action_id}", "port", "client", "80"], cwd=project_dir, capture_output=True, text=True)
                 port_mapping = res.stdout.strip()
                 if port_mapping:
                     port = port_mapping.split(":")[-1]
@@ -111,12 +130,12 @@ def run_shadow_verification(db: Session, remediation_action_id: int, project_dir
                         r1 = requests.get(f"http://localhost:{port}/", timeout=10)
                         r2 = requests.get(f"http://localhost:{port}/api/health", timeout=10)
                         if r1.status_code == 200 and r2.status_code < 500:
-                            tests.append({"name": "smoke_test", "passed": True, "output": "200 OK"})
+                            log_test(db, remediation_action_id, "smoke_test", True, "200 OK")
                         else:
-                            tests.append({"name": "smoke_test", "passed": False, "output": f"client={r1.status_code}, api={r2.status_code}"})
+                            log_test(db, remediation_action_id, "smoke_test", False, f"client={r1.status_code}, api={r2.status_code}")
                             success = False
                     except Exception as e:
-                        tests.append({"name": "smoke_test", "passed": False, "output": str(e)})
+                        log_test(db, remediation_action_id, "smoke_test", False, str(e))
                         success = False
             else:
                 res = subprocess.run(["docker", "port", container_name], capture_output=True, text=True)
@@ -127,38 +146,30 @@ def run_shadow_verification(db: Session, remediation_action_id: int, project_dir
                         r = requests.get(f"http://localhost:{port}/", timeout=10)
                         if framework == "react":
                             if r.status_code == 200 and 'id="root"' in r.text:
-                                tests.append({"name": "smoke_test", "passed": True, "output": "200 OK"})
+                                log_test(db, remediation_action_id, "smoke_test", True, "200 OK")
                             else:
-                                tests.append({"name": "smoke_test", "passed": False, "output": f"{r.status_code} - no root element"})
+                                log_test(db, remediation_action_id, "smoke_test", False, f"{r.status_code} - no root element")
                                 success = False
                         else:
                             if r.status_code < 500:
-                                tests.append({"name": "smoke_test", "passed": True, "output": f"{r.status_code} OK"})
+                                log_test(db, remediation_action_id, "smoke_test", True, f"{r.status_code} OK")
                             else:
-                                tests.append({"name": "smoke_test", "passed": False, "output": f"Status {r.status_code}"})
+                                log_test(db, remediation_action_id, "smoke_test", False, f"Status {r.status_code}")
                                 success = False
                     except Exception as e:
-                        tests.append({"name": "smoke_test", "passed": False, "output": str(e)})
+                        log_test(db, remediation_action_id, "smoke_test", False, str(e))
                         success = False
                         
     except Exception as e:
         logger.error(f"Shadow test failed: {e}")
         success = False
-        tests.append({"name": "exception", "passed": False, "output": str(e)})
+        log_test(db, remediation_action_id, "exception", False, str(e))
     finally:
         if deployment_type == "mern":
-            subprocess.run(["docker-compose", "down"], cwd=project_dir, capture_output=True)
+            subprocess.run(["docker", "compose", "-p", f"shadow_{remediation_action_id}", "down", "-v", "--remove-orphans"], cwd=project_dir, capture_output=True)
         elif container_name:
             subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
             
-        for t in tests:
-            st = ShadowTest(
-                remediation_action_id=remediation_action_id,
-                test_name=t["name"],
-                passed=t["passed"],
-                output=t["output"]
-            )
-            db.add(st)
-        db.commit()
+
         
     return success

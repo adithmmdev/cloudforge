@@ -7,6 +7,7 @@ from app.models.instance import Instance
 from app.models.container import Container
 from app.models.stage_event import StageEvent
 from app.models.failure import Failure
+from app.models.diagnosis import Diagnosis
 from app.models.remediation_action import RemediationAction
 from app.models.shadow_test import ShadowTest
 from app.models.deployment_report import DeploymentReport
@@ -44,7 +45,7 @@ REPORT_TEMPLATE = """# Deployment Report — {{ project.name }}
 | Stage | Timestamp | Detail |
 |-------|-----------|--------|
 {% for event in stage_events %}
-| {{ event.stage_name }} | {{ event.created_at.strftime('%Y-%m-%d %H:%M:%S') if event.created_at else '' }} | {{ event.detail }} |
+| {{ event.stage }} | {{ event.created_at.strftime('%Y-%m-%d %H:%M:%S') if event.created_at else '' }} | {{ event.detail }} |
 {% endfor %}
 
 ## Health Check
@@ -88,22 +89,24 @@ def generate_deployment_report(db: Session, deployment_id: int):
     containers = db.query(Container).filter(Container.deployment_id == deployment_id).all()
     stage_events = db.query(StageEvent).filter(StageEvent.deployment_id == deployment_id).order_by(StageEvent.created_at).all()
     
-    health_check = {
-        "method": "TCP",
-        "response_time_ms": 120,
-        "result": "passed" if deployment.status == "success" else "failed -> rolled_back"
-    }
+    health_check = None
+    if deployment.health_check_result:
+        health_check = {
+            "method": deployment.health_check_method,
+            "response_time_ms": deployment.health_check_ms,
+            "result": deployment.health_check_result
+        }
     
     db_failures = db.query(Failure).filter(Failure.deployment_id == deployment_id).all()
     failures_data = []
     for f in db_failures:
-        action = db.query(RemediationAction).filter(RemediationAction.failure_id == f.id).first()
+        action = db.query(RemediationAction).join(Diagnosis).filter(Diagnosis.failure_id == f.id).first()
         shadow_pass = False
         action_type = "NONE"
         confidence = 0.0
         if action:
             action_type = action.action_type
-            confidence = action.confidence
+            confidence = action.diagnosis.confidence if action.diagnosis else 0.0
             shadow_tests = db.query(ShadowTest).filter(ShadowTest.remediation_action_id == action.id).all()
             shadow_pass = all(st.passed for st in shadow_tests) if shadow_tests else False
             

@@ -50,6 +50,17 @@ def run_deployment_pipeline(db: Session, deployment_id: int):
         if not adapter:
             raise RuntimeError("Framework detection failed before build")
 
+        from app.models.container import Container
+        existing_ports = [
+            c.host_port for d in db.query(Deployment).filter(Deployment.instance_id == deployment.instance_id, Deployment.status.in_(['live', 'building', 'deploying', 'health_check', 'healing'])).all()
+            for c in d.containers if c.host_port is not None
+        ]
+        assigned_port = 8000
+        while assigned_port in existing_ports and assigned_port < 8100:
+            assigned_port += 1
+
+        extracted_info['host_port'] = assigned_port
+
         log_lines = []
         def build_logger(msg, service=None):
             line = f"[{service}] {msg}" if service else msg
@@ -57,6 +68,12 @@ def run_deployment_pipeline(db: Session, deployment_id: int):
             log_lines.append(line)
             if len(log_lines) > 100:
                 log_lines.pop(0)
+            try:
+                detail = f"{service}:{msg}" if service else msg
+                db.add(StageEvent(deployment_id=deployment_id, stage='log', detail=detail))
+                db.commit()
+            except Exception:
+                pass
 
         _record_stage(db, deployment, "building", f"Building {adapter.name} deployment image(s)")
         build_result = build_project(
@@ -86,7 +103,7 @@ def run_deployment_pipeline(db: Session, deployment_id: int):
                 status="running"
             )
             if "client" in img or "react" in img or "express" in img or "fastapi" in img or "flask" in img:
-                c.host_port = 80
+                c.host_port = assigned_port
             db.add(c)
         db.commit()
         
@@ -96,31 +113,32 @@ def run_deployment_pipeline(db: Session, deployment_id: int):
             
             for image_tag in image_tags:
                 logger.info(f"Deployment {deployment_id}: Transferring image {image_tag}")
-                ssh_cmd = [
-                    "ssh", "-o", "StrictHostKeyChecking=no",
-                    "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=5",
-                    "-i", key_path, 
-                    f"ubuntu@{instance.public_ip}", "docker", "load"
-                ]
-                save_cmd = ["docker", "save", image_tag]
+                # Use scp for reliable transfer instead of pipe over ssh (fixes Docker Desktop MTU stalls)
+                tar_file = f"/tmp/{image_tag.replace(':', '_')}.tar"
+                save_cmd = ["docker", "save", "-o", tar_file, image_tag]
+                res = subprocess.run(save_cmd, capture_output=True)
+                if res.returncode != 0:
+                    raise RuntimeError(f"Docker save failed: {res.stderr.decode()}")
                 
-                save_proc = subprocess.Popen(save_cmd, stdout=subprocess.PIPE)
-                ssh_proc = subprocess.Popen(ssh_cmd, stdin=save_proc.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                save_proc.stdout.close()
+                scp_cmd = ["scp", "-O", "-o", "StrictHostKeyChecking=no", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "-i", key_path, tar_file, f"ubuntu@{instance.public_ip}:/tmp/image.tar"]
+                res = subprocess.run(scp_cmd, capture_output=True)
+                if res.returncode != 0:
+                    raise RuntimeError(f"SCP failed: {res.stderr.decode()}")
                 
-                stdout, stderr = ssh_proc.communicate()
-                if ssh_proc.returncode != 0:
-                    raise RuntimeError(f"Image transfer failed for {image_tag}: {stderr.decode()}")
+                ssh_load_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "-i", key_path, f"ubuntu@{instance.public_ip}", f"docker load -i /tmp/image.tar"]
+                res = subprocess.run(ssh_load_cmd, capture_output=True)
+                if res.returncode != 0:
+                    raise RuntimeError(f"Docker load failed: {res.stderr.decode()}")
                 
         # Step 4: Launch Container
         logger.info(f"Deployment {deployment_id}: Launching container")
         
         if deployment.deployment_type == 'mern':
             if is_local:
-                run_cmd = ["docker-compose", "up", "-d"]
+                run_cmd = ["docker", "compose", "-p", f"cloudforge-{project.id}-{deployment_id}", "up", "-d"]
                 cwd = project_path
             else:
-                run_command = "docker compose up -d"
+                run_command = f"docker compose -p cloudforge-{project.id}-{deployment_id} up -d"
         else:
             main_image = image_tags[0]
             from app.models.remediation_action import RemediationAction
@@ -139,12 +157,15 @@ def run_deployment_pipeline(db: Session, deployment_id: int):
                     restart_policy = "--restart always"
                     
             if is_local:
+                import subprocess
+                subprocess.run(["docker", "rm", "-f", f"proj_{project.id}_{deployment_id}"], capture_output=True)
                 run_cmd = ["docker", "run", "-d", "-p", "80:8000"]
                 if restart_policy:
                     run_cmd.extend(["--restart", "always"])
                 run_cmd.extend([f"--memory={mem_limit}", "--cpus=0.5", "--pids-limit=100", "--name", f"proj_{project.id}_{deployment_id}", main_image])
             else:
-                run_command = f"docker run -d -p 80:8000 {restart_policy} --memory={mem_limit} --cpus=0.5 --pids-limit=100 --name proj_{project.id}_{deployment_id} {main_image}"
+                ssh.exec_command(f"docker rm -f proj_{project.id}_{deployment_id}")
+                run_command = f"docker run -d -p {assigned_port}:{extracted_info.get('backend_internal_port', 8000)} {restart_policy} --memory={mem_limit} --cpus=0.5 --pids-limit=100 --name proj_{project.id}_{deployment_id} {main_image}"
             
         if is_local:
             kwargs = {}
@@ -157,9 +178,9 @@ def run_deployment_pipeline(db: Session, deployment_id: int):
             # Wait and check if it crashed immediately
             time.sleep(15)
             if deployment.deployment_type == 'mern':
-                check_res = subprocess.run(["docker-compose", "ps", "-q"], cwd=cwd, capture_output=True, text=True)
+                check_res = subprocess.run(["docker", "compose", "-p", f"cloudforge-{project.id}-{deployment_id}", "ps", "-q"], cwd=cwd, capture_output=True, text=True)
                 if not check_res.stdout.strip():
-                    logs = subprocess.run(["docker-compose", "logs"], cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True).stdout
+                    logs = subprocess.run(["docker", "compose", "-p", f"cloudforge-{project.id}-{deployment_id}", "logs"], cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True).stdout
                     raise RuntimeError(f"Containers exited immediately after start. Logs:\n{logs}")
             else:
                 container_name = f"proj_{project.id}_{deployment_id}"
@@ -174,9 +195,12 @@ def run_deployment_pipeline(db: Session, deployment_id: int):
             ssh.connect(instance.public_ip, username='ubuntu', key_filename=key_path)
             
             if deployment.deployment_type == 'mern':
+                proj_dir = f"proj_{project.id}_{deployment_id}"
+                ssh.exec_command(f"mkdir -p {proj_dir}")
                 sftp = ssh.open_sftp()
-                sftp.put(os.path.join(project_path, "docker-compose.yml"), "docker-compose.yml")
+                sftp.put(os.path.join(project_path, "docker-compose.yml"), f"{proj_dir}/docker-compose.yml")
                 sftp.close()
+                run_command = f"cd {proj_dir} && docker compose up -d"
 
             stdin, stdout, stderr = ssh.exec_command(run_command)
             

@@ -6,13 +6,13 @@ ALLOWED_IMAGE_TAGS = {
 ALLOWED_START_COMMANDS = {"uvicorn", "gunicorn", "node", "nginx", "python"}
 SECRET_PATTERN = re.compile(r'(?i)(secret|token|password|api[_-]?key)')
 URI_CREDENTIALS_PATTERN = re.compile(r'://[^:]+:[^@]+@')
-PACKAGE_PATTERN = re.compile(r'^[a-zA-Z0-9_\-\.]+$')
+PACKAGE_PATTERN = re.compile(r'^@?[a-zA-Z0-9_\-\.\/]+$')
 
 def validate_action(deployment_type: str, container_services: list[str], action_type: str, params: dict) -> bool:
     if action_type not in [
-        "ADD_DEPENDENCY", "CHANGE_BASE_IMAGE", "EXPOSE_PORT",
+        "ADD_DEPENDENCY", "CHANGE_BASE_IMAGE", "EXPOSE_PORT", "CHANGE_INTERNAL_PORT",
         "SET_START_COMMAND", "INCREASE_MEMORY_LIMIT", "SET_ENV_VAR",
-        "RESTART_SERVICE", "NONE"
+        "RESTART_SERVICE", "ADD_RUN_COMMAND", "NONE"
     ]:
         return False
 
@@ -44,11 +44,22 @@ def validate_action(deployment_type: str, container_services: list[str], action_
         if deployment_type == "mern" and service != "client":
             return False
             
+    elif action_type == "CHANGE_INTERNAL_PORT":
+        port = params.get("port")
+        if not isinstance(port, int) or not (1 <= port <= 65535):
+            return False
+            
+            
     elif action_type == "SET_START_COMMAND":
         cmd = params.get("cmd")
         if not isinstance(cmd, list) or not all(isinstance(c, str) for c in cmd):
             return False
         if not cmd or cmd[0] not in ALLOWED_START_COMMANDS:
+            return False
+            
+    elif action_type == "ADD_RUN_COMMAND":
+        cmd = params.get("cmd")
+        if not isinstance(cmd, str) or not cmd.strip():
             return False
             
     elif action_type == "INCREASE_MEMORY_LIMIT":
@@ -93,9 +104,13 @@ def apply_add_dependency(repo_path: str, params: dict):
     elif os.path.exists(pkg_file):
         with open(pkg_file, "r") as f:
             data = json.load(f)
-        if "dependencies" not in data:
-            data["dependencies"] = {}
-        data["dependencies"][package] = "*"
+        
+        target_dict = "devDependencies" if package.startswith("@types/") else "dependencies"
+        
+        if target_dict not in data:
+            data[target_dict] = {}
+        data[target_dict][package] = "*"
+        
         with open(pkg_file, "w") as f:
             json.dump(data, f, indent=2)
 
@@ -125,12 +140,13 @@ def apply_expose_port(repo_path: str, params: dict):
         with open(dockerfile, "r") as f:
             content = f.read()
         if f"EXPOSE {port}" not in content:
-            # Insert before CMD or at the end
             lines = content.splitlines()
+            insert_idx = -1
             for i, line in enumerate(lines):
-                if line.startswith("CMD "):
-                    lines.insert(i, f"EXPOSE {port}")
-                    break
+                if line.startswith("WORKDIR ") or line.startswith("COPY "):
+                    insert_idx = i + 1
+            if insert_idx != -1:
+                lines.insert(insert_idx, f"EXPOSE {port}")
             else:
                 lines.append(f"EXPOSE {port}")
             with open(dockerfile, "w") as f:
@@ -151,6 +167,25 @@ def apply_set_start_command(repo_path: str, params: dict):
                     f.write(f"CMD {json.dumps(cmd)}\n")
                 else:
                     f.write(line)
+
+def apply_add_run_command(repo_path: str, params: dict):
+    service = params.get("service", "")
+    target_dir = os.path.join(repo_path, service) if service and service != "app" else repo_path
+    cmd = params.get("cmd")
+    dockerfile = os.path.join(target_dir, "Dockerfile")
+    
+    if os.path.exists(dockerfile):
+        with open(dockerfile, "r") as f:
+            lines = f.readlines()
+            
+        new_lines = []
+        for line in lines:
+            if line.startswith("CMD ") or line.startswith("ENTRYPOINT "):
+                new_lines.append(f"RUN {cmd}\n")
+            new_lines.append(line)
+            
+        with open(dockerfile, "w") as f:
+            f.writelines(new_lines)
 
 def apply_set_env_var(repo_path: str, params: dict):
     service = params.get("service", "")
@@ -197,10 +232,12 @@ def apply_action(repo_path: str, action_type: str, params: dict):
         apply_add_dependency(repo_path, params)
     elif action_type == "CHANGE_BASE_IMAGE":
         apply_change_base_image(repo_path, params)
-    elif action_type == "EXPOSE_PORT":
+    elif action_type in ["EXPOSE_PORT", "CHANGE_INTERNAL_PORT"]:
         apply_expose_port(repo_path, params)
     elif action_type == "SET_START_COMMAND":
         apply_set_start_command(repo_path, params)
+    elif action_type == "ADD_RUN_COMMAND":
+        apply_add_run_command(repo_path, params)
     elif action_type == "INCREASE_MEMORY_LIMIT":
         apply_increase_memory_limit(repo_path, params)
     elif action_type == "SET_ENV_VAR":

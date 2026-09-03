@@ -5,8 +5,10 @@ from app.remediation.prompt import generate_prompt, parse_llm_response
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b-instruct")
 
-def get_remediation_action(redacted_signature: dict) -> dict:
-    prompt = generate_prompt(redacted_signature)
+def get_remediation_action(db, redacted_signature: dict, past_actions: list = None) -> dict:
+    from app.models.disclosure import Disclosure
+    
+    prompt = generate_prompt(redacted_signature, past_actions)
     
     payload = {
         "model": OLLAMA_MODEL,
@@ -16,12 +18,14 @@ def get_remediation_action(redacted_signature: dict) -> dict:
     }
     
     try:
-        response = requests.post(f"{OLLAMA_HOST}/api/generate", json=payload, timeout=30)
+        response = requests.post(f"{OLLAMA_HOST}/api/generate", json=payload, timeout=120)
         response.raise_for_status()
         
         response_text = response.json().get("response", "")
         return parse_llm_response(response_text)
     except Exception as e:
+        import sys
+        print(f"LOCAL LLM EXCEPTION: {e}", file=sys.stderr)
         return {
             "action_type": "NONE",
             "params": {},

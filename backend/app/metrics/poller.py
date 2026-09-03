@@ -57,7 +57,7 @@ def poll_metrics_for_instance(db: Session, instance: Instance):
         
         active_deployments = db.query(Deployment).filter(
             Deployment.instance_id == instance.id,
-            Deployment.status == 'deployed'
+            Deployment.status.in_(['deployed', 'live'])
         ).all()
         
         if not active_deployments:
@@ -121,3 +121,52 @@ def poll_metrics_for_instance(db: Session, instance: Instance):
         logger.error(f"Error polling metrics for instance {instance.id}: {e}")
     finally:
         ssh.close()
+
+import threading
+from app.db.session import SessionLocal
+import boto3
+
+def auto_stop_idle_instances(db: Session):
+    try:
+        instances = db.query(Instance).filter(Instance.status == 'running').all()
+        for instance in instances:
+            # Check if there are any active deployments
+            active_deps = db.query(Deployment).filter(
+                Deployment.instance_id == instance.id,
+                Deployment.status.in_(['live', 'pending', 'building', 'deploying', 'health_check', 'healing'])
+            ).count()
+            
+            if active_deps == 0:
+                logger.info(f"Instance {instance.aws_instance_id} is idle (0 active deployments). Auto-stopping to optimize cost.")
+                try:
+                    ec2 = boto3.client('ec2', region_name=os.getenv("AWS_REGION", "us-east-1"))
+                    ec2.stop_instances(InstanceIds=[instance.aws_instance_id])
+                    instance.status = "stopped"
+                    db.commit()
+                except Exception as e:
+                    logger.error(f"Failed to auto-stop instance {instance.aws_instance_id}: {e}")
+    except Exception as e:
+        logger.error(f"Error in auto_stop_idle_instances: {e}")
+
+def _metrics_polling_loop():
+    while True:
+        try:
+            db = SessionLocal()
+            try:
+                # 1. Auto-optimize infrastructure (auto-stop idle instances)
+                auto_stop_idle_instances(db)
+                
+                # 2. Poll metrics for running instances
+                instances = db.query(Instance).filter(Instance.status == 'running').all()
+                for instance in instances:
+                    poll_metrics_for_instance(db, instance)
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"Metrics polling loop error: {e}")
+            
+        time.sleep(5)
+
+def start_metrics_poller():
+    thread = threading.Thread(target=_metrics_polling_loop, daemon=True)
+    thread.start()
