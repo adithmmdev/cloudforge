@@ -30,6 +30,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./keys:/app/keys
       - uploads:/app/uploads
+      - ./.env:/app/.env
 
   frontend:
     build: ./frontend

@@ -70,7 +70,7 @@ def background_setup_task(db: Session, allowed_ssh_cidr: str):
 def start_aws_setup(req: SetupRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     import os
     from dotenv import set_key
-    env_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), '.env')
+    env_file = '/app/.env'
 
     if req.aws_access_key_id:
         os.environ["AWS_ACCESS_KEY_ID"] = req.aws_access_key_id
