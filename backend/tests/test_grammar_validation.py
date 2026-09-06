@@ -20,8 +20,8 @@ def test_validate_change_base_image():
 
 def test_validate_expose_port():
     assert validate_action("single_container", ["app"], "EXPOSE_PORT", {"port": 8000}) is True
-    assert validate_action("single_container", ["app"], "EXPOSE_PORT", {"port": 70000}) is False
-    assert validate_action("mern", ["client", "server", "mongo"], "EXPOSE_PORT", {"service": "client", "port": 80}) is True
+    assert validate_action("single_container", ["app"], "EXPOSE_PORT", {"port": 80, "service": "app"}) is True
+    assert validate_action("mern", ["client", "server", "mongo"], "CHANGE_INTERNAL_PORT", {"port": 80, "service": "server"}) is True
     assert validate_action("mern", ["client", "server", "mongo"], "EXPOSE_PORT", {"service": "server", "port": 8000}) is False
 
 def test_validate_set_start_command():

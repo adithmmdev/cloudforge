@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 NVIDIA_NIM_BASE_URL = os.getenv('NVIDIA_NIM_BASE_URL', 'https://integrate.api.nvidia.com/v1')
 NVIDIA_NIM_API_KEY = os.getenv('NVIDIA_NIM_API_KEY', '')
-MODEL = os.getenv('CLOUD_LLM_MODEL_NVIDIA', 'moonshotai/kimi-k3')
+MODEL = os.getenv('CLOUD_LLM_MODEL_NVIDIA', 'meta/llama-3.1-70b-instruct')
 MAX_OUTPUT_TOKENS = int(os.getenv('COPILOT_MAX_OUTPUT_TOKENS', '1200'))
 # 45s for direct NVIDIA, 90s for proxy (Render cold start + forwarding)
 REQUEST_TIMEOUT = int(os.getenv('COPILOT_REQUEST_TIMEOUT', '90'))

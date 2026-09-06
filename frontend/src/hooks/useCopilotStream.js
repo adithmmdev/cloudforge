@@ -1,37 +1,59 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
-// When VITE_BACKEND_URL is set (e.g. https://cloudforge-backend.onrender.com),
-// Copilot calls go directly to the Render backend so Kimi K3 is reachable.
-// Leave unset to use the local NGINX proxy (default local dev mode).
 const BACKEND_BASE = import.meta.env.VITE_BACKEND_URL || '';
 
+// --- GLOBAL STATE FOR PERSISTENT STREAMING ---
+let globalStreamState = {
+  isStreaming: false,
+  streamingContent: '',
+  status: 'idle',
+  statusMessage: '',
+  toolsUsed: [],
+  error: null,
+  activeSessionId: null,
+};
+
+let globalAbortController = null;
+const listeners = new Set();
+
+function notifyListeners() {
+  for (const listener of listeners) {
+    listener({ ...globalStreamState });
+  }
+}
+
 export default function useCopilotStream() {
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [streamingContent, setStreamingContent] = useState('');
-  const [status, setStatus] = useState('idle');
-  const [statusMessage, setStatusMessage] = useState('');
-  const [toolsUsed, setToolsUsed] = useState([]);
-  const [error, setError] = useState(null);
-  const abortRef = useRef(null);
+  const [state, setState] = useState(globalStreamState);
+
+  useEffect(() => {
+    listeners.add(setState);
+    return () => {
+      listeners.delete(setState);
+    };
+  }, []);
 
   const sendMessage = useCallback(async (sessionId, content, onComplete) => {
-    if (abortRef.current) {
-      abortRef.current.abort();
+    if (globalAbortController) {
+      globalAbortController.abort();
     }
     const controller = new AbortController();
-    abortRef.current = controller;
+    globalAbortController = controller;
 
-    setIsStreaming(true);
-    setStreamingContent('');
-    setStatus('thinking');
-    setStatusMessage('Analyzing question…');
-    setError(null);
-    setToolsUsed([]);
+    globalStreamState = {
+      isStreaming: true,
+      streamingContent: '',
+      status: 'thinking',
+      statusMessage: 'Analyzing question...',
+      toolsUsed: [],
+      error: null,
+      activeSessionId: sessionId,
+    };
+    notifyListeners();
 
     let accumulatedContent = '';
 
     try {
-      const response = await fetch(`${BACKEND_BASE}/api/copilot/sessions/${sessionId}/messages`, {
+      const response = await fetch(`/api/copilot/sessions/${sessionId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content }),
@@ -67,33 +89,34 @@ export default function useCopilotStream() {
             const data = JSON.parse(dataStr);
             switch (eventType) {
               case 'copilot_thinking':
-                setStatus('thinking');
-                setStatusMessage(data.status || 'Thinking…');
+                globalStreamState.status = 'thinking';
+                globalStreamState.statusMessage = data.status || 'Thinking...';
                 break;
               case 'copilot_context':
-                setStatus('gathering');
-                setToolsUsed(data.tools_called || []);
-                setStatusMessage(data.summary || 'Evidence loaded');
+                globalStreamState.status = 'gathering';
+                globalStreamState.toolsUsed = data.tools_called || [];
+                globalStreamState.statusMessage = data.summary || 'Evidence loaded';
                 break;
               case 'copilot_generating':
-                setStatus('generating');
-                setStatusMessage('Generating response…');
+                globalStreamState.status = 'generating';
+                globalStreamState.statusMessage = 'Generating response...';
                 break;
               case 'copilot_token':
                 accumulatedContent += data.token || '';
-                setStreamingContent(accumulatedContent);
+                globalStreamState.streamingContent = accumulatedContent;
                 break;
               case 'copilot_done':
-                setStatus('done');
-                setIsStreaming(false);
+                globalStreamState.status = 'done';
+                globalStreamState.isStreaming = false;
                 if (onComplete) onComplete(accumulatedContent, data);
                 break;
               case 'copilot_error':
-                setError(data.message || 'Unknown error');
-                setStatus('error');
-                setIsStreaming(false);
+                globalStreamState.error = data.message || 'Unknown error';
+                globalStreamState.status = 'error';
+                globalStreamState.isStreaming = false;
                 break;
             }
+            notifyListeners();
           } catch {
             // ignore parse errors
           }
@@ -101,19 +124,21 @@ export default function useCopilotStream() {
       }
     } catch (err) {
       if (err.name !== 'AbortError') {
-        setError(err.message || 'Connection error');
-        setStatus('error');
+        globalStreamState.error = err.message || 'Connection error';
+        globalStreamState.status = 'error';
       }
-      setIsStreaming(false);
+      globalStreamState.isStreaming = false;
+      notifyListeners();
     }
   }, []);
 
   const cancel = useCallback(() => {
-    if (abortRef.current) abortRef.current.abort();
-    setIsStreaming(false);
-    setStatus('idle');
-    setStreamingContent('');
+    if (globalAbortController) globalAbortController.abort();
+    globalStreamState.isStreaming = false;
+    globalStreamState.status = 'idle';
+    globalStreamState.streamingContent = '';
+    notifyListeners();
   }, []);
 
-  return { isStreaming, streamingContent, status, statusMessage, toolsUsed, error, sendMessage, cancel };
+  return { ...state, sendMessage, cancel };
 }

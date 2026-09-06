@@ -54,3 +54,20 @@ def test_broken_variants():
     assert registry.detect(os.path.join(base_dir, "broken-fastapi"))[0] is None
     assert registry.detect(os.path.join(base_dir, "broken-mern"))[0] is None
 
+def test_mern_frontend_backend():
+    fixture_path = os.path.join(base_dir, "mern-frontend-backend-sample")
+    adapter, meta = registry.detect(fixture_path)
+    assert adapter is not None
+    assert adapter.name == "mern"
+    assert "client" in meta
+    assert "server" in meta
+    
+    # Verify the folders were renamed to client/server
+    assert os.path.exists(os.path.join(fixture_path, "client"))
+    assert os.path.exists(os.path.join(fixture_path, "server"))
+    assert not os.path.exists(os.path.join(fixture_path, "frontend"))
+    assert not os.path.exists(os.path.join(fixture_path, "backend"))
+    
+    # Restore the original folder names for subsequent test runs
+    os.rename(os.path.join(fixture_path, "client"), os.path.join(fixture_path, "frontend"))
+    os.rename(os.path.join(fixture_path, "server"), os.path.join(fixture_path, "backend"))

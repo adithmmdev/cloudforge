@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  BrainCircuit, AlertTriangle, Loader2, Sparkles, ChevronDown
+  BrainCircuit, AlertTriangle, Loader2, Sparkles, ChevronDown, CheckCircle2, Terminal
 } from 'lucide-react';
 import useCopilotStream from '../hooks/useCopilotStream';
 import SessionSidebar from '../components/copilot/SessionSidebar';
@@ -8,114 +8,112 @@ import ChatMessage from '../components/copilot/ChatMessage';
 import ChatInput from '../components/copilot/ChatInput';
 import QuickActions from '../components/copilot/QuickActions';
 
-// When VITE_BACKEND_URL is set, all copilot REST calls target the Render backend.
-const BACKEND_BASE = import.meta.env.VITE_BACKEND_URL || '';
-const api = (path) => `${BACKEND_BASE}${path}`;
-
-/** Animated thinking dots shown while streaming */
 function ThinkingIndicator({ status, message, toolsUsed }) {
-  const icons = { thinking: '🧠', gathering: '🔍', generating: '✨' };
-  const icon = icons[status] || '⚡';
+  const steps = [
+    { key: 'analyzing', label: 'Analyzing request...' },
+    { key: 'gathering', label: 'Inspecting telemetry & logs...' },
+    { key: 'generating', label: 'Generating insights...' }
+  ];
+
+  let activeIndex = 0;
+  if (status === 'gathering') activeIndex = 1;
+  if (status === 'generating') activeIndex = 2;
+
   return (
-    <div className="flex items-start gap-3 mb-4 px-4 md:px-8">
-      {/* Avatar */}
-      <div className="flex-shrink-0 w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-sm mt-0.5">
-        <Loader2 size={14} className="text-white animate-spin" />
+    <div className="flex items-start gap-4 mb-8 px-4 md:px-8 max-w-4xl mx-auto w-full">
+      <div className="flex-shrink-0 w-9 h-9 rounded-[14px] bg-indigo-50 border border-indigo-100 flex items-center justify-center shadow-sm mt-1">
+        <Loader2 size={16} className="text-indigo-600 animate-spin" />
       </div>
-      <div className="flex-1">
-        <div className="inline-flex items-center gap-2 bg-white border border-gray-100 rounded-2xl rounded-tl-sm shadow-sm px-4 py-3">
-          <span className="text-base">{icon}</span>
-          <div>
-            <p className="text-sm text-slate-700 font-medium">{message || 'Thinking…'}</p>
-            {toolsUsed.length > 0 && (
-              <p className="text-[11px] text-gray-400 mt-0.5 font-mono">
-                {toolsUsed.slice(0, 4).join(' · ')}{toolsUsed.length > 4 ? ' …' : ''}
-              </p>
-            )}
-          </div>
-          {/* Animated dots */}
-          <div className="flex gap-1 ml-1">
-            <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-            <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-            <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-          </div>
+      <div className="flex-1 mt-1">
+        <div className="flex flex-col gap-2">
+          {steps.map((step, idx) => {
+            const isPast = idx < activeIndex;
+            const isActive = idx === activeIndex;
+            const isFuture = idx > activeIndex;
+
+            if (isFuture) return null;
+
+            return (
+              <div key={step.key} className={`flex items-center gap-2 transition-all duration-300 ${isActive ? 'opacity-100 translate-y-0' : 'opacity-60 -translate-y-1'}`}>
+                {isPast ? (
+                  <CheckCircle2 size={14} className="text-emerald-500" />
+                ) : (
+                  <span className="relative flex h-2 w-2 ml-1 mr-1">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500" />
+                  </span>
+                )}
+                <span className={`text-[13px] font-medium ${isActive ? 'text-indigo-700' : 'text-slate-500'}`}>
+                  {isActive && message ? message : step.label}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
   );
 }
 
-/** Status badge for the current deployment */
 function DeploymentBadge({ deployment }) {
   if (!deployment) return null;
   const s = (deployment.status || '').toLowerCase();
   const cfg = s.includes('live') || s.includes('success')
-    ? { dot: 'bg-emerald-400 animate-pulse', text: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' }
+    ? { dot: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' }
     : s.includes('fail') || s.includes('error') || s.includes('cancel')
-    ? { dot: 'bg-red-400', text: 'text-red-700', bg: 'bg-red-50 border-red-200' }
+    ? { dot: 'bg-red-500', text: 'text-red-700', bg: 'bg-red-50 border-red-200' }
     : s.includes('build') || s.includes('deploy')
-    ? { dot: 'bg-amber-400 animate-pulse', text: 'text-amber-700', bg: 'bg-amber-50 border-amber-200' }
-    : { dot: 'bg-gray-400', text: 'text-gray-600', bg: 'bg-gray-50 border-gray-200' };
+    ? { dot: 'bg-amber-500 animate-pulse', text: 'text-amber-700', bg: 'bg-amber-50 border-amber-200' }
+    : { dot: 'bg-slate-400', text: 'text-slate-600', bg: 'bg-slate-50 border-slate-200' };
 
   return (
-    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${cfg.bg} ${cfg.text}`}>
+    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider border ${cfg.bg} ${cfg.text}`}>
       <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot}`} />
-      #{deployment.id} · {deployment.status}
+      #{deployment.id} {deployment.status}
     </div>
   );
 }
 
-/** Project selector with search */
 function ProjectSelector({ projects, selectedId, onChange }) {
   const selected = projects.find(p => p.id === selectedId);
-
-  // Only show projects that have some data (status set or many entries)
-  // Group by name with unique entries preferred
   const displayProjects = projects.filter(p => p.status || p.last_deployment_id)
     .concat(projects.filter(p => !p.status && !p.last_deployment_id).slice(0, 20));
   const unique = Array.from(new Map(displayProjects.map(p => [p.id, p])).values());
 
   return (
-    <div className="relative">
+    <div className="relative group">
       <select
         value={selectedId || ''}
         onChange={e => onChange(parseInt(e.target.value))}
-        className="appearance-none pl-3 pr-8 py-1.5 text-sm bg-white border border-gray-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 cursor-pointer transition-colors hover:border-gray-300"
+        className="appearance-none pl-3 pr-8 py-1.5 text-sm font-medium bg-slate-50 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 cursor-pointer transition-all hover:bg-slate-100 outline-none"
       >
         {unique.length === 0 ? (
           <option value="">No projects</option>
         ) : (
           unique.map(p => (
             <option key={p.id} value={p.id}>
-              #{p.id} · {p.name} ({p.framework})
+              {p.name}
             </option>
           ))
         )}
-        {/* Also include all other projects in a group */}
-        <optgroup label="All projects">
-          {projects
-            .filter(p => !unique.find(u => u.id === p.id))
-            .map(p => (
-              <option key={p.id} value={p.id}>
-                #{p.id} · {p.name}
-              </option>
-            ))
-          }
-        </optgroup>
       </select>
-      <ChevronDown size={13} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+      <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover:text-slate-600 transition-colors" />
     </div>
   );
 }
 
 export default function CopilotPage() {
   const [projects, setProjects] = useState([]);
-  const [selectedProjectId, setSelectedProjectId] = useState(null);
+  const [selectedProjectId, setSelectedProjectId] = useState(
+    parseInt(localStorage.getItem('copilot_project_id')) || null
+  );
   const [currentDeployment, setCurrentDeployment] = useState(null);
   const [loadingProjects, setLoadingProjects] = useState(true);
 
   const [sessions, setSessions] = useState([]);
-  const [activeSessionId, setActiveSessionId] = useState(null);
+  const [activeSessionId, setActiveSessionId] = useState(
+    localStorage.getItem('copilot_session_id') || null
+  );
   const [messages, setMessages] = useState([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
 
@@ -125,33 +123,37 @@ export default function CopilotPage() {
 
   const {
     isStreaming, streamingContent, status: streamStatus,
-    statusMessage, toolsUsed, error: streamError, sendMessage, cancel
+    statusMessage, toolsUsed, error: streamError, sendMessage, cancel, activeSessionId: streamSessionId
   } = useCopilotStream();
-
-  // ------ Data fetching ------
 
   useEffect(() => {
     setLoadingProjects(true);
-    fetch(api('/api/projects'))
+    fetch('/api/projects')
       .then(r => r.ok ? r.json() : [])
       .then(data => {
         const arr = Array.isArray(data) ? data : (data.projects || data.data || []);
         setProjects(arr);
-        // Auto-select first project that has a deployment
-        const withDep = arr.find(p => p.status || p.last_deployment_id);
-        if (withDep) setSelectedProjectId(withDep.id);
-        else if (arr.length > 0) setSelectedProjectId(arr[0].id);
+        
+        // Only auto-select if we don't have one in localStorage
+        if (!selectedProjectId) {
+          const withDep = arr.find(p => p.status || p.last_deployment_id);
+          if (withDep) {
+            setSelectedProjectId(withDep.id);
+            localStorage.setItem('copilot_project_id', withDep.id);
+          } else if (arr.length > 0) {
+            setSelectedProjectId(arr[0].id);
+            localStorage.setItem('copilot_project_id', arr[0].id);
+          }
+        }
       })
       .catch(() => {})
       .finally(() => setLoadingProjects(false));
-  }, []);
+  }, []); // Only on mount
 
   useEffect(() => {
     if (!selectedProjectId) return;
     setCurrentDeployment(null);
-
-    // Fetch latest deployment
-    fetch(api(`/api/deployments?project_id=${selectedProjectId}&limit=1`))
+    fetch(`/api/deployments?project_id=${selectedProjectId}&limit=1`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (Array.isArray(data) && data.length > 0) setCurrentDeployment(data[0]);
@@ -159,25 +161,37 @@ export default function CopilotPage() {
       })
       .catch(() => {});
 
-    // Fetch sessions
-    fetch(api(`/api/copilot/projects/${selectedProjectId}/sessions`))
+    fetch(`/api/copilot/projects/${selectedProjectId}/sessions`)
       .then(r => r.ok ? r.json() : [])
       .then(data => {
-        setSessions(Array.isArray(data) ? data : []);
-        setActiveSessionId(null);
-        setMessages([]);
+        const sess = Array.isArray(data) ? data : [];
+        setSessions(sess);
+        
+        // Re-load messages if we have an activeSessionId stored
+        if (activeSessionId) {
+          // Verify it belongs to this project
+          const exists = sess.find(s => s.id === activeSessionId);
+          if (exists) {
+            loadSessionMessages(activeSessionId);
+          } else {
+            setActiveSessionId(null);
+            localStorage.removeItem('copilot_session_id');
+            setMessages([]);
+          }
+        }
       })
       .catch(() => setSessions([]));
   }, [selectedProjectId]);
 
   const loadSessionMessages = useCallback((sessionId) => {
     setLoadingMessages(true);
-    fetch(api(`/api/copilot/sessions/${sessionId}`))
+    fetch(`/api/copilot/sessions/${sessionId}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data?.messages) {
           setMessages(data.messages);
           setActiveSessionId(sessionId);
+          localStorage.setItem('copilot_session_id', sessionId);
           setAutoScroll(true);
         }
       })
@@ -187,13 +201,15 @@ export default function CopilotPage() {
 
   const handleProjectChange = (id) => {
     setSelectedProjectId(id);
+    localStorage.setItem('copilot_project_id', id);
     setMessages([]);
     setActiveSessionId(null);
+    localStorage.removeItem('copilot_session_id');
   };
 
   const createSession = async (titleHint = 'New Chat') => {
     if (!selectedProjectId) return null;
-    const res = await fetch(api(`/api/copilot/projects/${selectedProjectId}/sessions`), {
+    const res = await fetch(`/api/copilot/projects/${selectedProjectId}/sessions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: titleHint }),
@@ -208,6 +224,7 @@ export default function CopilotPage() {
       if (session) {
         setSessions(prev => [session, ...prev]);
         setActiveSessionId(session.id);
+        localStorage.setItem('copilot_session_id', session.id);
         setMessages([]);
       }
     } catch (e) {
@@ -216,20 +233,18 @@ export default function CopilotPage() {
   };
 
   const handleDeleteSession = (sessionId) => {
-    fetch(api(`/api/copilot/sessions/${sessionId}`), { method: 'DELETE' }).then(() => {
+    fetch(`/api/copilot/sessions/${sessionId}`, { method: 'DELETE' }).then(() => {
       setSessions(prev => prev.filter(s => s.id !== sessionId));
       if (activeSessionId === sessionId) {
         setActiveSessionId(null);
+        localStorage.removeItem('copilot_session_id');
         setMessages([]);
       }
     });
   };
 
-  // ------ Send flow ------
-
   const handleSend = async (content) => {
     if (!content.trim() || isStreaming) return;
-
     let sid = activeSessionId;
     if (!sid) {
       try {
@@ -238,12 +253,12 @@ export default function CopilotPage() {
         setSessions(prev => [session, ...prev]);
         sid = session.id;
         setActiveSessionId(sid);
+        localStorage.setItem('copilot_session_id', sid);
       } catch {
         return;
       }
     }
 
-    // Optimistic: add user message
     const optimisticUser = {
       id: `opt-${Date.now()}`,
       role: 'user',
@@ -253,25 +268,21 @@ export default function CopilotPage() {
     setMessages(prev => [...prev, optimisticUser]);
     setAutoScroll(true);
 
-    // Update session title optimistically
     setSessions(prev => prev.map(s =>
       s.id === sid && s.title === 'New Chat'
         ? { ...s, title: content.slice(0, 45) }
         : s
     ));
 
-    sendMessage(sid, content, (finalContent) => {
-      // On complete: reload messages from server for accurate DB state
+    sendMessage(sid, content, () => {
       loadSessionMessages(sid);
     });
   };
 
-  // ------ Auto-scroll ------
-
   const handleScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
     setAutoScroll(atBottom);
   };
 
@@ -281,14 +292,11 @@ export default function CopilotPage() {
     }
   }, [messages, streamingContent, streamStatus, autoScroll]);
 
-  // ------ Render ------
-
-  const hasMessages = messages.length > 0 || isStreaming;
+  const hasMessages = messages.length > 0 || (isStreaming && streamSessionId === activeSessionId);
 
   return (
-    <div className="ml-[240px] mt-11 h-[calc(100vh-44px)] bg-white flex overflow-hidden">
-
-      {/* Left: Session Sidebar */}
+    <div className="h-[calc(100vh-44px)] bg-white flex overflow-hidden w-full">
+      
       <SessionSidebar
         sessions={sessions}
         activeSessionId={activeSessionId}
@@ -298,24 +306,22 @@ export default function CopilotPage() {
         projectId={selectedProjectId}
       />
 
-      {/* Right: Chat Area */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
-
-        {/* Top Header */}
-        <div className="flex-shrink-0 h-14 border-b border-gray-100 bg-white flex items-center justify-between px-5">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-sm">
-              <BrainCircuit size={16} className="text-white" />
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-white relative items-center w-full">
+        <div className="flex-shrink-0 h-[60px] border-b border-gray-100 bg-white/80 backdrop-blur-md flex items-center justify-between px-6 z-10 w-full">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-[10px] bg-indigo-600 flex items-center justify-center shadow-sm">
+              <Sparkles size={16} className="text-white" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-slate-900 leading-tight">CloudForge Copilot</p>
-              <p className="text-[10px] text-gray-400 leading-tight">Powered by Kimi K3</p>
+              <div className="flex items-center gap-2">
+                <p className="text-[15px] font-semibold text-slate-900 leading-none">Nova AI</p>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             {loadingProjects ? (
-              <Loader2 size={14} className="text-gray-400 animate-spin" />
+              <Loader2 size={16} className="text-gray-400 animate-spin" />
             ) : (
               <ProjectSelector
                 projects={projects}
@@ -327,119 +333,86 @@ export default function CopilotPage() {
           </div>
         </div>
 
-        {/* Stream Status Bar */}
-        {isStreaming && streamStatus !== 'generating' && (
-          <div className="flex-shrink-0 bg-indigo-50 border-b border-indigo-100 px-5 py-2 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs text-indigo-700">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500" />
-              </span>
-              <span className="font-medium">{statusMessage}</span>
-            </div>
-            {toolsUsed.length > 0 && (
-              <span className="text-[10px] text-indigo-400 font-mono hidden sm:block">
-                {toolsUsed.slice(0, 3).join(' · ')}
-              </span>
-            )}
+        {streamError && streamSessionId === activeSessionId && (
+          <div className="flex-shrink-0 bg-red-50 border-b border-red-100 px-6 py-3 flex items-center justify-center gap-2 text-sm text-red-700 shadow-sm z-10 w-full">
+            <AlertTriangle size={16} />
+            <span className="font-medium">{streamError}</span>
           </div>
         )}
 
-        {/* Error Banner */}
-        {streamError && (
-          <div className="flex-shrink-0 bg-red-50 border-b border-red-100 px-5 py-2.5 flex items-center gap-2 text-sm text-red-700">
-            <AlertTriangle size={15} />
-            <span>{streamError}</span>
-          </div>
-        )}
-
-        {/* Messages */}
         <div
           ref={scrollRef}
           onScroll={handleScroll}
-          className="flex-1 overflow-y-auto"
-          style={{ scrollbarWidth: 'thin', scrollbarColor: '#E5E7EB transparent' }}
+          className="flex-1 overflow-y-auto w-full flex flex-col items-center"
+          style={{ scrollbarWidth: 'thin', scrollbarColor: '#CBD5E1 transparent' }}
         >
-          {!hasMessages ? (
-            /* Empty state */
-            <div className="h-full flex flex-col items-center justify-center px-8 pb-16">
-              <div className="relative mb-6">
-                <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-xl">
-                  <BrainCircuit size={36} className="text-white" />
+          <div className="w-full max-w-4xl px-4 flex flex-col h-full">
+            {!hasMessages ? (
+              <div className="flex-1 flex flex-col items-center justify-center pb-20 mt-20">
+                <div className="relative mb-8 animate-in fade-in zoom-in duration-500 delay-150 fill-mode-both">
+                  <div className="w-24 h-24 rounded-[32px] bg-gradient-to-br from-indigo-500 via-purple-500 to-indigo-600 flex items-center justify-center shadow-2xl shadow-indigo-500/20 ring-1 ring-white/20">
+                    <Sparkles size={40} className="text-white fill-white/20" />
+                  </div>
                 </div>
-                <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-amber-400 flex items-center justify-center shadow">
-                  <Sparkles size={12} className="text-white" />
+                <h2 className="text-[28px] font-bold text-slate-900 mb-4 tracking-tight animate-in fade-in slide-in-from-bottom-4 duration-500 delay-300 fill-mode-both">How can I help you?</h2>
+                <div className="text-slate-500 text-[15px] text-center max-w-lg leading-relaxed flex flex-col gap-1 mb-10 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-500 fill-mode-both">
+                  <p>Understand your deployments. Diagnose failures.</p>
+                  <p>Explore your infrastructure.</p>
+                  {!selectedProjectId && <span className="text-amber-600 font-medium mt-2 bg-amber-50 px-3 py-1 rounded-full w-max mx-auto">Please select a project first</span>}
+                </div>
+                <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500 delay-700 fill-mode-both">
+                  {selectedProjectId && <QuickActions onAction={handleSend} />}
                 </div>
               </div>
-              <h2 className="text-2xl font-bold text-slate-900 mb-2">How can I help you?</h2>
-              <p className="text-gray-500 text-sm mb-8 text-center max-w-md leading-relaxed">
-                Ask anything about your deployments — failures, logs, AWS state, pipeline stages, remediation attempts.
-                {!selectedProjectId && <span className="text-amber-600 block mt-1">← Select a project first</span>}
-              </p>
-              {selectedProjectId && <QuickActions onAction={handleSend} />}
-            </div>
-          ) : (
-            <div className="py-6 max-w-4xl mx-auto w-full">
-              {loadingMessages ? (
-                <div className="flex justify-center py-12">
-                  <Loader2 className="text-indigo-400 animate-spin" size={24} />
-                </div>
-              ) : (
-                messages.map((msg, idx) => (
-                  <ChatMessage
-                    key={msg.id || idx}
-                    message={msg}
-                    isStreaming={false}
-                  />
-                ))
-              )}
+            ) : (
+              <div className="py-8 w-full pb-32 flex-1">
+                {loadingMessages ? (
+                  <div className="flex justify-center py-16">
+                    <Loader2 className="text-indigo-400 animate-spin" size={28} />
+                  </div>
+                ) : (
+                  messages.map((msg, idx) => (
+                    <div key={msg.id || idx} className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                      <ChatMessage
+                        message={msg}
+                        isStreaming={false}
+                      />
+                    </div>
+                  ))
+                )}
 
-              {/* Streaming states */}
-              {isStreaming && streamStatus !== 'generating' && !streamingContent && (
-                <ThinkingIndicator
-                  status={streamStatus}
-                  message={statusMessage}
-                  toolsUsed={toolsUsed}
-                />
-              )}
-              {isStreaming && streamingContent && (
-                <ChatMessage
-                  message={{
-                    role: 'assistant',
-                    content: streamingContent,
-                    model: 'kimi-k3',
-                    created_at: new Date().toISOString(),
-                  }}
-                  isStreaming={true}
-                />
-              )}
-
-              <div ref={messagesEndRef} className="h-6" />
-            </div>
-          )}
+                {isStreaming && streamSessionId === activeSessionId && (
+                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+                    {streamStatus !== 'generating' && !streamingContent ? (
+                      <ThinkingIndicator
+                        status={streamStatus}
+                        message={statusMessage}
+                        toolsUsed={toolsUsed}
+                      />
+                    ) : (
+                      <ChatMessage
+                        message={{ role: 'assistant', content: streamingContent, evidence_refs: { tools: toolsUsed } }}
+                        isStreaming={true}
+                      />
+                    )}
+                  </div>
+                )}
+                <div ref={messagesEndRef} className="h-4" />
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Scroll to bottom button */}
-        {!autoScroll && hasMessages && (
-          <button
-            onClick={() => {
-              setAutoScroll(true);
-              messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-            }}
-            className="absolute bottom-24 right-8 w-9 h-9 rounded-full bg-white border border-gray-200 shadow-md flex items-center justify-center text-gray-500 hover:text-indigo-600 hover:border-indigo-300 transition-colors z-10"
-          >
-            <ChevronDown size={16} />
-          </button>
-        )}
-
-        {/* Input */}
-        <div className="flex-shrink-0 border-t border-gray-100 bg-white/80 backdrop-blur-sm">
-          <ChatInput
-            onSend={handleSend}
-            isStreaming={isStreaming}
-            onCancel={cancel}
-          />
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-white via-white to-transparent pt-10 pb-6 px-4 pointer-events-none flex justify-center w-full">
+          <div className="pointer-events-auto w-full max-w-4xl">
+            <ChatInput 
+              onSend={handleSend} 
+              isStreaming={isStreaming && streamSessionId === activeSessionId} 
+              onCancel={cancel} 
+            />
+          </div>
         </div>
+
       </div>
     </div>
   );

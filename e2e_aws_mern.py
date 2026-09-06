@@ -25,7 +25,29 @@ def check_aws_state():
     return instances
 
 def trigger_mern_deployment():
-    # 1. Upload MERN fixture
+    log("Generating MERN fixture zip...")
+    import zipfile
+    import io
+    
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        # Client files
+        zf.writestr('client/package.json', '{"name":"client","scripts":{"build":"mkdir -p dist && echo \\"<html>React Client\\" > dist/index.html"},"dependencies":{"react":"^18.0.0"}}')
+
+        
+        # Server files
+        server_js = """
+const express = require('express');
+const app = express();
+app.get('/api/health', (req, res) => res.send('OK'));
+app.listen(5000, '0.0.0.0', () => console.log('Server started on 5000'));
+"""
+        zf.writestr('server/package.json', '{"name":"server","scripts":{"start":"node index.js"},"dependencies":{"express":"^4.17.1"}}')
+        zf.writestr('server/index.js', server_js)
+        
+    with open("mern.zip", "wb") as f:
+        f.write(zip_buffer.getvalue())
+
     log("Uploading MERN fixture...")
     fixture_path = "mern.zip"
 
@@ -72,23 +94,31 @@ def monitor_deployment(deployment_id):
 
 def verify_app(app_url):
     log(f"Verifying React client at {app_url}...")
-    try:
-        res = requests.get(app_url, timeout=10)
-        log(f"Client response status: {res.status_code}")
-        if res.status_code == 200:
-            log("React client is reachable!")
-        else:
-            log("Warning: React client returned non-200")
-    except Exception as e:
-        log(f"Failed to reach React client: {e}")
-
+    client_up = False
+    for attempt in range(6):
+        try:
+            res = requests.get(app_url, timeout=10)
+            log(f"Client response status: {res.status_code}")
+            if res.status_code == 200:
+                log("React client is reachable!")
+                client_up = True
+                break
+            else:
+                log("Warning: React client returned non-200")
+        except Exception as e:
+            log(f"Failed to reach React client (attempt {attempt+1}/6): {e}")
+        time.sleep(10)
+        
     api_url = f"{app_url}/api/health"
     log(f"Verifying Express+Mongo through proxy at {api_url}...")
-    try:
-        res = requests.get(api_url, timeout=10)
-        log(f"API response: {res.status_code} - {res.text}")
-    except Exception as e:
-        log(f"Failed to reach API health: {e}")
+    for attempt in range(6):
+        try:
+            res = requests.get(api_url, timeout=10)
+            log(f"API response: {res.status_code} - {res.text}")
+            break
+        except Exception as e:
+            log(f"Failed to reach API health (attempt {attempt+1}/6): {e}")
+            time.sleep(10)
 
 def verify_report(deployment_id):
     log("Verifying Deployment Report generation...")

@@ -1,268 +1,374 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Terminal, Activity, Clock, Server, Shield, Stethoscope, Search, Settings, FileText } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import {
+  ExternalLink, Play, Loader2, ChevronRight, RefreshCw,
+  AlertCircle, CheckCircle, XCircle
+} from 'lucide-react';
+import DeploymentGraph from '../components/DeploymentGraph.jsx';
+import TimelineTab from '../components/tabs/TimelineTab.jsx';
+import LogsTab from '../components/tabs/LogsTab.jsx';
+import MetricsTab from '../components/tabs/MetricsTab.jsx';
+import ServiceListTab from '../components/tabs/ServiceListTab.jsx';
+import AgentReasoningTab from '../components/tabs/AgentReasoningTab.jsx';
+import DisclosureLedgerTab from '../components/tabs/DisclosureLedgerTab.jsx';
+import ShadowVerificationTab from '../components/tabs/ShadowVerificationTab.jsx';
+import DeploymentReportTab from '../components/tabs/DeploymentReportTab.jsx';
+import AdvancedHealthTab from '../components/tabs/AdvancedHealthTab.jsx';
+import AutonomyDial from '../components/AutonomyDial.jsx';
+
+const TABS = [
+  { key: 'timeline',     label: 'Timeline' },
+  { key: 'reasoning',    label: 'Agent Reasoning' },
+  { key: 'disclosure',   label: 'Disclosure Ledger' },
+  { key: 'shadow',       label: 'Shadow Verification' },
+  { key: 'logs',         label: 'Logs' },
+  { key: 'metrics',      label: 'Metrics' },
+  { key: 'health',       label: 'Health Analytics' },
+  { key: 'services',     label: 'Service List' },
+  { key: 'report',       label: 'Deployment Report' },
+];
+
+const STATUS_STYLES = {
+  live:        'text-emerald-700 bg-emerald-50 border-emerald-200',
+  building:    'text-amber-700 bg-amber-50 border-amber-200',
+  failed:      'text-red-700 bg-red-50 border-red-200',
+  pending:     'text-gray-600 bg-gray-50 border-gray-200',
+  healing:     'text-purple-700 bg-purple-50 border-purple-200',
+  rolled_back: 'text-orange-700 bg-orange-50 border-orange-200',
+  deployed:    'text-emerald-700 bg-emerald-50 border-emerald-200',
+};
 
 export default function ProjectDetail() {
-  const { id } = useParams();
-  const [activeTab, setActiveTab] = useState('metrics');
-  
-  const [deployments, setDeployments] = useState([]);
-  const [latestDeployment, setLatestDeployment] = useState(null);
-  
-  const [metrics, setMetrics] = useState([]);
-  const [diagnoses, setDiagnoses] = useState([]);
-  const [disclosures, setDisclosures] = useState([]);
-  const [shadowTests, setShadowTests] = useState([]);
-  const [remediationActions, setRemediationActions] = useState([]);
-  const [report, setReport] = useState(null);
+  const { id: projectId } = useParams();
+  const [project, setProject] = useState(null);
+  const [deployment, setDeployment] = useState(null);
+  const [activeTab, setActiveTab] = useState('timeline');
+  const [loading, setLoading] = useState(true);
+  const [deploying, setDeploying] = useState(false);
   const [autonomyMode, setAutonomyMode] = useState('approve_each');
 
-  // Fetch initial project data
-  useEffect(() => {
-    fetch(`/api/projects/${id}/deployments`)
-      .then(r => r.json())
-      .then(data => {
-        setDeployments(data);
-        if (data.length > 0) {
-          setLatestDeployment(data[0]);
-        }
-      })
-      .catch(console.error);
-      
-    fetch(`/api/projects/${id}/autonomy`)
-      .then(r => r.json())
-      .then(data => setAutonomyMode(data.mode))
-      .catch(console.error);
-  }, [id]);
+  // WS state
+  const [stageEvents, setStageEvents] = useState([]);
+  const [logs, setLogs] = useState([]);
+  const [liveMetrics, setLiveMetrics] = useState([]);
+  const [diagnosis, setDiagnosis] = useState(null);
+  const [remediationAction, setRemediationAction] = useState(null);
+  const [disclosures, setDisclosures] = useState([]);
+  const [shadowTests, setShadowTests] = useState([]);
+  const [shadowState, setShadowState] = useState('idle');
+  const wsRef = useRef(null);
+  const reconnectRef = useRef(null);
+  const deploymentIdRef = useRef(null);
 
-  // Fetch deployment specific data
-  useEffect(() => {
-    if (!latestDeployment) return;
-    const depId = latestDeployment.id;
-    
-    fetch(`/api/deployments/${depId}/diagnoses`).then(r => r.json()).then(setDiagnoses).catch(console.error);
-    fetch(`/api/deployments/${depId}/disclosures`).then(r => r.json()).then(setDisclosures).catch(console.error);
-    fetch(`/api/deployments/${depId}/shadow-tests`).then(r => r.json()).then(setShadowTests).catch(console.error);
-    fetch(`/api/deployments/${depId}/remediation-actions`).then(r => r.json()).then(setRemediationActions).catch(console.error);
-    fetch(`/api/deployments/${depId}/report`).then(r => {
-      if(r.ok) return r.json();
-      return null;
-    }).then(setReport).catch(console.error);
-    
-    // WebSocket for metrics
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.host}/api/ws/deployments/${depId}`);
-    
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'deployment_update' && data.metrics) {
-        // Just take the first container's metrics for the chart for simplicity
-        const containerNames = Object.keys(data.metrics);
-        if (containerNames.length > 0) {
-            const m = data.metrics[containerNames[0]];
-            setMetrics(prev => {
-                const newMetrics = [...prev, { time: new Date(m.timestamp).toLocaleTimeString(), cpu: m.cpu_percent, mem: m.mem_usage_mb }];
-                if (newMetrics.length > 20) return newMetrics.slice(newMetrics.length - 20);
-                return newMetrics;
-            });
+  // Fetch project & latest deployment
+  const fetchProject = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/projects`, { cache: 'no-store' });
+      const data = await res.json();
+      const proj = Array.isArray(data) ? data.find(p => String(p.id) === String(projectId)) : null;
+      if (proj) {
+        setProject(proj);
+        if (proj.last_deployment_id) {
+          // Fetch the full deployment object
+          const depRes = await fetch(`/api/deployments/${proj.last_deployment_id}`, { cache: 'no-store' });
+          if (depRes.ok) {
+            const dep = await depRes.json();
+            setDeployment(dep);
+            deploymentIdRef.current = dep.id;
+          }
         }
       }
-    };
-    
-    return () => ws.close();
-  }, [latestDeployment]);
+    } catch {}
+    setLoading(false);
+  }, [projectId]);
 
-  const handleAutonomyChange = (mode) => {
-    fetch(`/api/projects/${id}/autonomy`, {
+  const fetchAutonomy = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/projects/${projectId}/autonomy`);
+      if (res.ok) { const d = await res.json(); setAutonomyMode(d.mode); }
+    } catch {}
+  }, [projectId]);
+
+  useEffect(() => {
+    fetchProject();
+    fetchAutonomy();
+  }, [fetchProject, fetchAutonomy]);
+
+  // WebSocket connection
+  const connectWS = useCallback((depId) => {
+    if (wsRef.current) wsRef.current.close();
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${proto}//${window.location.host}/api/ws/deployments/${depId}`);
+    wsRef.current = ws;
+
+    ws.onmessage = (evt) => {
+      try {
+        const data = JSON.parse(evt.data);
+        const { event, ...payload } = data;
+
+        switch (event) {
+          case 'stage_update':
+            setStageEvents(prev => [...prev, { ...payload, timestamp: new Date().toISOString() }]);
+            setDeployment(prev => prev ? { ...prev, status: payload.stage === 'live' ? 'live' : prev.status } : prev);
+            if (payload.stage === 'shadow_testing') setShadowState('building');
+            if (payload.stage === 'live') {
+              setActiveTab('timeline');
+              fetchProject();
+            }
+            break;
+          case 'build_log':
+          case 'container_log':
+            setLogs(prev => [...prev.slice(-500), payload]);
+            break;
+          case 'log_line':
+            setLogs(prev => [...prev.slice(-500), { text: payload.text, service: payload.service || 'app', timestamp: payload.created_at }]);
+            break;
+          case 'metrics':
+            setLiveMetrics(prev => [...prev.slice(-200), payload]);
+            break;
+          case 'diagnosis_proposed':
+            setDiagnosis(payload);
+            setActiveTab('reasoning');
+            break;
+          case 'disclosure_logged':
+            setDisclosures(prev => [...prev, { ...payload, timestamp: payload.timestamp || new Date().toISOString() }]);
+            break;
+          case 'shadow_test_result':
+            setShadowTests(prev => {
+              const copy = [...prev];
+              const idx = copy.findIndex(t => t.test_name === payload.test_name && t.remediation_action_id === payload.remediation_action_id);
+              if (idx >= 0) copy[idx] = payload;
+              else copy.push(payload);
+              return copy;
+            });
+            
+            if (payload.passed) setActiveTab('shadow');
+            break;
+          case 'awaiting_approval':
+            setRemediationAction({ id: payload.remediation_action_id, status: 'awaiting_approval' });
+            setActiveTab('reasoning');
+            break;
+          case 'remediation_promoted':
+            setRemediationAction(prev => prev ? { ...prev, status: 'promoted' } : prev);
+            break;
+          case 'remediation_rejected':
+            setRemediationAction(prev => prev ? { ...prev, status: 'rejected' } : prev);
+            break;
+          case 'deployment_complete':
+            setDeployment(prev => prev ? { ...prev, status: 'live', app_url: payload.app_url } : prev);
+            fetchProject();
+            break;
+          case 'deployment_failed':
+            setDeployment(prev => prev ? { ...prev, status: payload.rolled_back ? 'rolled_back' : 'failed' } : prev);
+            break;
+        }
+      } catch {}
+    };
+
+    ws.onclose = () => {
+      reconnectRef.current = setTimeout(() => {
+        if (deploymentIdRef.current) connectWS(deploymentIdRef.current);
+      }, 5000);
+    };
+  }, [fetchProject]);
+
+  // Hydrate historical data when a deployment is loaded (for failed/live deployments visited after the fact)
+  useEffect(() => {
+    if (!deployment?.id) return;
+    const depId = deployment.id;
+    (async () => {
+      try {
+        const [diagData, discData, shadowData, stageData, remActData] = await Promise.all([
+          fetch(`/api/deployments/${depId}/diagnoses`, { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
+          fetch(`/api/deployments/${depId}/disclosures`, { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
+          fetch(`/api/deployments/${depId}/shadow-tests`, { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
+          fetch(`/api/deployments/${depId}/stage-events`, { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
+          fetch(`/api/deployments/${depId}/remediation-actions`, { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
+        ]);
+        // Only hydrate if no live data yet
+        if (diagData.length > 0) setDiagnosis(prev => prev || diagData[diagData.length - 1]);
+        if (discData.length > 0) setDisclosures(prev => prev.length === 0 ? discData : prev);
+        if (shadowData.length > 0) {
+          setShadowTests(prev => prev.length === 0 ? shadowData : prev);
+          setShadowState(shadowData.every(t => t.passed) ? 'passed' : 'failed');
+        }
+        if (stageData.length > 0) {
+          const nonLogEvents = stageData.filter(e => e.stage !== 'log');
+          const logEvents = stageData.filter(e => e.stage === 'log');
+          setStageEvents(prev => prev.length === 0 ? nonLogEvents : prev);
+          setLogs(prev => prev.length === 0 ? logEvents.map(e => {
+            const detail = e.detail || '';
+            if (detail.includes(':')) {
+              const [svc, ...rest] = detail.split(':');
+              return { text: rest.join(':').trim(), service: svc.trim(), timestamp: e.created_at };
+            }
+            return { text: detail, service: 'app', timestamp: e.created_at };
+          }) : prev);
+        }
+        // Hydrate remediation action for approve/reject buttons
+        if (remActData.length > 0) {
+          const pending = remActData.find(a => a.status === 'awaiting_approval');
+          const latest = remActData[remActData.length - 1];
+          setRemediationAction(prev => prev || pending || latest || null);
+        }
+      } catch {}
+    })();
+  }, [deployment?.id]);
+
+  useEffect(() => {
+    if (deployment?.id) {
+      deploymentIdRef.current = deployment.id;
+      connectWS(deployment.id);
+    }
+    return () => {
+      if (wsRef.current) wsRef.current.close();
+      if (reconnectRef.current) clearTimeout(reconnectRef.current);
+    };
+  }, [deployment?.id, connectWS]);
+
+  const handleDeploy = async () => {
+    setDeploying(true);
+    setStageEvents([]);
+    setLogs([]);
+    setLiveMetrics([]);
+    setDiagnosis(null);
+    setShadowTests([]);
+    setShadowState('idle');
+    setDisclosures([]);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/deploy`, { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        setDeployment({ id: data.deployment_id, status: 'pending' });
+        deploymentIdRef.current = data.deployment_id;
+      }
+    } catch {}
+    setDeploying(false);
+  };
+
+  const handleAutonomyChange = async (mode) => {
+    setAutonomyMode(mode);
+    await fetch(`/api/projects/${projectId}/autonomy`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode })
-    }).then(() => setAutonomyMode(mode)).catch(console.error);
+      body: JSON.stringify({ mode }),
+    });
   };
-  
-  const handleApproveAction = (actionId) => {
-    fetch(`/api/remediation-actions/${actionId}/approve`, { method: 'POST' })
-      .then(() => alert("Action approved!"))
-      .catch(console.error);
-  };
-  
-  const handleRejectAction = (actionId) => {
-    fetch(`/api/remediation-actions/${actionId}/reject`, { method: 'POST' })
-      .then(() => alert("Action rejected!"))
-      .catch(console.error);
-  };
+
+  const status = deployment?.status || 'pending';
+  const statusStyle = STATUS_STYLES[status] || STATUS_STYLES.pending;
+  const isCompose = project?.framework === 'mern';
+  const isActive = ['pending', 'building', 'deploying', 'health_check', 'healing'].includes(status);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!project) {
+    return (
+      <div className="p-6">
+        <div className="flex items-center gap-2 text-red-600">
+          <AlertCircle className="w-5 h-5" />
+          <span>Project #{projectId} not found</span>
+        </div>
+        <Link to="/" className="mt-3 inline-block text-[12px] text-indigo-600 hover:underline">← Back to Dashboard</Link>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-6xl mx-auto">
-        <Link to="/" className="flex items-center text-blue-600 mb-6 hover:underline">
-          <ArrowLeft className="w-4 h-4 mr-1" /> Back to Dashboard
+    <div className="flex flex-col h-[calc(100vh-44px)]">
+      {/* Project Header */}
+      <div className="px-6 py-3 border-b border-gray-200 bg-white flex items-center gap-4 flex-shrink-0">
+        <Link to="/" className="text-[12px] text-gray-400 hover:text-gray-600 flex items-center gap-1">
+          Dashboard <ChevronRight className="w-3 h-3" />
         </Link>
-        
-        <div className="flex justify-between items-center mb-6">
-            <h1 className="text-3xl font-bold text-gray-900">Project {id} Details</h1>
-            <div className="flex items-center space-x-2 bg-white p-2 rounded-lg shadow-sm">
-                <Settings className="w-4 h-4 text-gray-500" />
-                <span className="text-sm font-medium">Autonomy Dial:</span>
-                <select value={autonomyMode} onChange={(e) => handleAutonomyChange(e.target.value)} className="text-sm border-gray-300 rounded">
-                    <option value="suggest_only">Suggest Only</option>
-                    <option value="approve_each">Approve Each</option>
-                    <option value="full_auto">Full Auto</option>
-                </select>
-            </div>
-        </div>
-        
-        <div className="flex border-b border-gray-200 mb-6 overflow-x-auto">
-          <button onClick={() => setActiveTab('metrics')} className={`px-4 py-2 flex items-center whitespace-nowrap ${activeTab === 'metrics' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}>
-            <Activity className="w-4 h-4 mr-2" /> Metrics
-          </button>
-          <button onClick={() => setActiveTab('diagnoses')} className={`px-4 py-2 flex items-center whitespace-nowrap ${activeTab === 'diagnoses' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}>
-            <Stethoscope className="w-4 h-4 mr-2" /> Agent Reasoning
-          </button>
-          <button onClick={() => setActiveTab('actions')} className={`px-4 py-2 flex items-center whitespace-nowrap ${activeTab === 'actions' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}>
-            <Shield className="w-4 h-4 mr-2" /> Remediation Actions
-          </button>
-          <button onClick={() => setActiveTab('shadow')} className={`px-4 py-2 flex items-center whitespace-nowrap ${activeTab === 'shadow' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}>
-            <Search className="w-4 h-4 mr-2" /> Shadow Verification
-          </button>
-          <button onClick={() => setActiveTab('disclosures')} className={`px-4 py-2 flex items-center whitespace-nowrap ${activeTab === 'disclosures' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}>
-            <Server className="w-4 h-4 mr-2" /> Disclosure Ledger
-          </button>
-          <button onClick={() => setActiveTab('report')} className={`px-4 py-2 flex items-center whitespace-nowrap ${activeTab === 'report' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}>
-            <FileText className="w-4 h-4 mr-2" /> Deployment Report
+        <span className="text-[13px] font-semibold text-gray-900">{project.name}</span>
+        <span className="px-2 py-0.5 rounded text-[11px] font-mono font-medium border bg-gray-50 text-gray-600 border-gray-200">
+          {project.framework?.toUpperCase()}
+        </span>
+        {deployment && (
+          <span className={`px-2 py-0.5 rounded text-[11px] font-medium border ${statusStyle} flex items-center gap-1`}>
+            {isActive && <Loader2 className="w-3 h-3 animate-spin" />}
+            {status}
+          </span>
+        )}
+        <div className="ml-auto flex items-center gap-3">
+          {deployment?.app_url && status === 'live' && (
+            <a href={deployment.app_url} target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1 text-[12px] text-emerald-600 hover:text-emerald-800 font-medium font-mono">
+              {deployment.app_url} <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
+          <AutonomyDial projectId={projectId} currentMode={autonomyMode} onChange={handleAutonomyChange} />
+          <button
+            onClick={handleDeploy}
+            disabled={deploying || isActive}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 disabled:opacity-50 transition-all"
+          >
+            {deploying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+            {deploying ? 'Deploying...' : 'Deploy'}
           </button>
         </div>
-        
-        <div className="bg-white p-6 rounded-xl shadow-sm min-h-[400px]">
-          {activeTab === 'metrics' && (
-            <div>
-              <h3 className="text-lg font-semibold mb-4">CPU Usage (%)</h3>
-              <div className="h-64 mb-8">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={metrics}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="time" />
-                    <YAxis />
-                    <Tooltip />
-                    <Line type="monotone" dataKey="cpu" stroke="#2563eb" isAnimationActive={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-              
-              <h3 className="text-lg font-semibold mb-4">Memory Usage (MB)</h3>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={metrics}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="time" />
-                    <YAxis />
-                    <Tooltip />
-                    <Line type="monotone" dataKey="mem" stroke="#16a34a" isAnimationActive={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          )}
-          
-          {activeTab === 'diagnoses' && (
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Agent Reasoning</h3>
-              {diagnoses.length === 0 ? <p className="text-gray-500">No diagnoses found.</p> : (
-                  <div className="space-y-4">
-                      {diagnoses.map(d => (
-                          <div key={d.id} className="p-4 border rounded-lg bg-gray-50">
-                              <div className="flex justify-between items-center mb-2">
-                                <span className={`px-2 py-1 text-xs font-bold rounded text-white ${d.model_tier === 'local' ? 'bg-blue-600' : 'bg-purple-600'}`}>
-                                    {d.model_tier.toUpperCase()} - {d.cloud_provider}
-                                </span>
-                                <span className="text-sm font-mono bg-gray-200 px-2 py-1 rounded">Confidence: {(d.confidence * 100).toFixed(1)}%</span>
-                              </div>
-                              <p className="font-semibold text-gray-800">Action: {d.action_type}</p>
-                              <pre className="text-xs bg-gray-800 text-green-400 p-2 rounded mt-2 overflow-x-auto">{JSON.stringify(d.params, null, 2)}</pre>
-                              <p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">{d.reasoning}</p>
-                          </div>
-                      ))}
-                  </div>
-              )}
-            </div>
-          )}
-          
-          {activeTab === 'actions' && (
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Remediation Actions</h3>
-              {remediationActions.length === 0 ? <p className="text-gray-500">No remediation actions found.</p> : (
-                  <div className="space-y-4">
-                      {remediationActions.map(a => (
-                          <div key={a.id} className="p-4 border rounded-lg flex justify-between items-center bg-gray-50">
-                              <div>
-                                <p className="font-semibold text-gray-800">{a.action_type}</p>
-                                <p className="text-sm text-gray-500">{JSON.stringify(a.params)}</p>
-                                <span className={`inline-block mt-1 px-2 py-1 text-xs rounded ${a.status === 'proposed' ? 'bg-yellow-100 text-yellow-800' : a.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{a.status.toUpperCase()}</span>
-                              </div>
-                              {a.status === 'proposed' && autonomyMode === 'approve_each' && (
-                                  <div className="space-x-2">
-                                      <button onClick={() => handleApproveAction(a.id)} className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700">Approve</button>
-                                      <button onClick={() => handleRejectAction(a.id)} className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700">Reject</button>
-                                  </div>
-                              )}
-                          </div>
-                      ))}
-                  </div>
-              )}
-            </div>
-          )}
+      </div>
 
-          {activeTab === 'shadow' && (
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Shadow Verification Tests</h3>
-              {shadowTests.length === 0 ? <p className="text-gray-500">No shadow tests run yet.</p> : (
-                  <div className="space-y-4">
-                      {shadowTests.map(t => (
-                          <div key={t.id} className={`p-4 border rounded-lg ${t.passed ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
-                              <p className="font-semibold">{t.test_name}</p>
-                              <p className={`text-sm ${t.passed ? 'text-green-700' : 'text-red-700'}`}>{t.passed ? 'PASSED' : 'FAILED'}</p>
-                              <pre className="text-xs mt-2 overflow-x-auto bg-gray-900 text-gray-100 p-2 rounded">{t.output}</pre>
-                          </div>
-                      ))}
-                  </div>
-              )}
-            </div>
-          )}
+      {/* Topology Graph */}
+      <div className="flex-shrink-0 border-b border-gray-200 bg-white" style={{ height: '220px' }}>
+        <DeploymentGraph
+          deployment={deployment}
+          services={deployment?.services || []}
+          instanceIp={project.instance_ip}
+          status={status}
+          isCompose={isCompose}
+        />
+      </div>
 
-          {activeTab === 'disclosures' && (
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Disclosure Ledger</h3>
-              <p className="text-sm text-gray-500 mb-4">Log of all redacted signatures sent to third-party APIs.</p>
-              {disclosures.length === 0 ? <p className="text-gray-500">No disclosures made.</p> : (
-                  <div className="space-y-4">
-                      {disclosures.map(d => (
-                          <div key={d.id} className="p-4 border rounded-lg bg-gray-50">
-                              <div className="flex justify-between items-center mb-2">
-                                <span className="font-semibold text-blue-600">{d.provider_name}</span>
-                                <span className="text-xs text-gray-500">{new Date(d.timestamp).toLocaleString()}</span>
-                              </div>
-                              <pre className="text-xs bg-gray-900 text-blue-300 p-2 rounded overflow-x-auto">{d.redacted_signature}</pre>
-                          </div>
-                      ))}
-                  </div>
-              )}
-            </div>
-          )}
+      {/* Tab Bar */}
+      <div className="flex-shrink-0 border-b border-gray-200 bg-white px-6 flex items-end overflow-x-auto">
+        {TABS.map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-3 py-2.5 text-[12px] font-medium whitespace-nowrap border-b-2 transition-all ${
+              activeTab === tab.key
+                ? 'border-indigo-500 text-indigo-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
-          {activeTab === 'report' && (
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Deployment Report</h3>
-              {!report ? <p className="text-gray-500">No report generated yet.</p> : (
-                  <div className="prose max-w-none bg-white border border-gray-200 p-6 rounded-lg">
-                      <pre className="whitespace-pre-wrap font-sans">{report.markdown_content}</pre>
-                      <p className="text-xs text-gray-400 mt-4">Generated at: {new Date(report.generated_at).toLocaleString()}</p>
-                  </div>
-              )}
-            </div>
-          )}
-          
-        </div>
+      {/* Tab Content */}
+      <div className="flex-1 overflow-auto">
+        {activeTab === 'timeline'   && <TimelineTab events={stageEvents} currentStage={stageEvents.length > 0 ? stageEvents[stageEvents.length - 1].stage : status} deployment={deployment} />}
+        {activeTab === 'reasoning'  && (
+          <AgentReasoningTab
+            diagnosis={diagnosis}
+            remediationAction={remediationAction}
+            autonomyMode={autonomyMode}
+            isLocalActive={isActive}
+            deploymentId={deployment?.id}
+          />
+        )}
+        {activeTab === 'disclosure' && <DisclosureLedgerTab deploymentId={deployment?.id} liveDisclosures={disclosures} />}
+        {activeTab === 'shadow'     && (
+          <ShadowVerificationTab
+            deploymentId={deployment?.id}
+            shadowTests={shadowTests}
+            shadowState={shadowState}
+          />
+        )}
+        {activeTab === 'logs'       && <LogsTab logs={logs} isCompose={isCompose} />}
+        {activeTab === 'metrics'    && <MetricsTab deploymentId={deployment?.id} liveMetrics={liveMetrics} />}
+        {activeTab === 'health'     && <AdvancedHealthTab deploymentId={deployment?.id} deploymentStatus={deployment?.status} />}
+        {activeTab === 'services'   && <ServiceListTab services={deployment?.services || []} />}
+        {activeTab === 'report'     && <DeploymentReportTab deploymentId={deployment?.id} deploymentStatus={deployment?.status} />}
       </div>
     </div>
   );
