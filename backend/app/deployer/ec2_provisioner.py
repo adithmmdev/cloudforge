@@ -35,9 +35,13 @@ def provision_instance(db: Session, max_instances: int = None) -> Instance:
 
     # 1. ACQUIRE pg_advisory_xact_lock
     db.execute(text("SELECT pg_advisory_xact_lock(12345)"))
-    
-    ec2 = boto3.client('ec2', region_name=os.getenv("AWS_REGION", "us-east-1"))
-    
+    ec2 = boto3.client(
+        'ec2', 
+        region_name=os.getenv("AWS_REGION", "us-east-1"),
+        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY")
+    )
+
     # 2. RECONCILE
     res = ec2.describe_instances(Filters=[{'Name': 'tag:cloudforge-managed', 'Values': ['true']}])
     aws_instances = {}

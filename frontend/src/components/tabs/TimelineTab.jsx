@@ -129,13 +129,37 @@ export default function TimelineTab({ events, currentStage, deployment }) {
                         </span>
                       )}
                     </div>
-                    {lastEvent?.detail && s !== 'pending' && (
+                    {stage === 'diagnosis' && lastEvent?.detail ? (
+                      (() => {
+                        try {
+                          const diag = JSON.parse(lastEvent.detail);
+                          return (
+                            <div className="mt-1.5 bg-gray-900 rounded p-3 font-mono text-[10px] text-gray-300 shadow-sm border border-gray-800">
+                              <div className="flex items-center justify-between mb-2 pb-2 border-b border-gray-800">
+                                <span className="text-indigo-400 font-bold uppercase tracking-wider">DIAGNOSIS YIELD</span>
+                                <span className="text-gray-500">PROVIDER: {diag.cloud_provider || 'unknown'}</span>
+                              </div>
+                              <div className="mb-2">
+                                <span className="text-gray-500 mr-2">ROOT CAUSE:</span>
+                                <span className="text-gray-300">{diag.reasoning?.split('\n')[0]?.replace('Root Cause: ', '') || diag.reasoning}</span>
+                              </div>
+                              <div className="flex gap-4">
+                                <div><span className="text-gray-500 mr-2">ACTION:</span><span className={diag.action_type === 'NONE' ? 'text-red-400 font-bold' : 'text-green-400 font-bold'}>{diag.action_type}</span></div>
+                                <div><span className="text-gray-500 mr-2">CONFIDENCE:</span><span className="text-blue-400">{(diag.confidence * 100).toFixed(1)}%</span></div>
+                              </div>
+                            </div>
+                          );
+                        } catch(e) {
+                          return <p className="text-[11px] text-gray-500 mt-0.5 font-mono truncate max-w-lg">{lastEvent.detail}</p>;
+                        }
+                      })()
+                    ) : lastEvent?.detail && s !== 'pending' && (
                       <p className="text-[11px] text-gray-500 mt-0.5 font-mono truncate max-w-lg">
                         {lastEvent.detail}
                       </p>
                     )}
-                    {/* Show all detail lines if multiple events for a stage */}
-                    {stageEvents.length > 1 && (
+                    {/* Show all detail lines if multiple events for a stage (unless diagnosis) */}
+                    {stageEvents.length > 1 && stage !== 'diagnosis' && (
                       <div className="mt-1.5 bg-gray-900 rounded p-2 font-mono text-[10px] text-gray-400 max-h-20 overflow-y-auto">
                         {stageEvents.map((e, i) => (
                           <div key={i}>

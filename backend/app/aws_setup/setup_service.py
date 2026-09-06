@@ -9,8 +9,18 @@ def run_aws_setup(db: Session, allowed_ssh_cidr: str = "0.0.0.0/0", log_callback
     if not log_callback:
         log_callback = lambda step, msg: None
 
-    sts = boto3.client('sts')
-    ec2 = boto3.client('ec2', region_name=os.getenv("AWS_REGION", "us-east-1"))
+    sts = boto3.client(
+        'sts',
+        region_name=os.getenv("AWS_REGION", "us-east-1"),
+        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY")
+    )
+    ec2 = boto3.client(
+        'ec2',
+        region_name=os.getenv("AWS_REGION", "us-east-1"),
+        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY")
+    )
 
     # Step 1: Validate IAM Permissions
     log_callback("step1", "Validating IAM permissions...")

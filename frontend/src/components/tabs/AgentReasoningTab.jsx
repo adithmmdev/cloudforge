@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { Network, Search, AlertTriangle, CheckCircle, Activity, Bot, Cpu } from 'lucide-react';
 
 export default function AgentReasoningTab({ diagnosis, remediationAction, autonomyMode, isLocalActive, deploymentId }) {
@@ -68,8 +68,8 @@ export default function AgentReasoningTab({ diagnosis, remediationAction, autono
           </div>
           <div className="text-right">
             <div className="text-[10px] text-gray-500">EXECUTION STATUS</div>
-            <div className="font-bold text-[13px] uppercase text-green-400">
-              {remediationAction ? remediationAction.status : (autonomyMode === 'suggest_only' ? 'HALTED' : 'PENDING')}
+            <div className={`font-bold text-[13px] uppercase ${remediationAction?.status === 'discarded' ? 'text-red-400' : 'text-green-400'}`}>
+              {remediationAction ? (remediationAction.status === 'discarded' ? 'HALTED (NO FIX PROPOSED)' : remediationAction.status) : (autonomyMode === 'suggest_only' ? 'HALTED' : 'PENDING')}
             </div>
           </div>
         </div>
