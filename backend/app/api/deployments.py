@@ -86,6 +86,34 @@ def cancel_deployment(id: int, db: Session = Depends(get_db)):
         
     return {"message": "Deployment cancelled", "id": id}
 
+@router.post("/{id}/resume")
+def resume_deployment(id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    dep = db.query(Deployment).filter(Deployment.id == id).first()
+    if not dep:
+        raise HTTPException(404, "Deployment not found")
+    if dep.status not in ["failed", "cancelled", "rolled_back", "remediation_proposed"]:
+        return {"message": "Deployment is not in a resumable state", "status": dep.status}
+
+    from app.models.stage_event import StageEvent
+    from app.orchestrator.loop import run_orchestration_loop
+    import asyncio
+    from app.api.aws_setup import manager
+
+    dep.status = "pending"
+    dep.finished_at = None
+    db.add(StageEvent(deployment_id=dep.id, stage="resuming", detail="Deployment resumed by user"))
+    db.commit()
+
+    background_tasks.add_task(run_orchestration_loop, db, id)
+
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(manager.broadcast({"type": "deployment_resumed", "deployment_id": id}))
+    except:
+        pass
+
+    return {"message": "Deployment resumed", "id": id}
+
 @router.post("/action/cancel-all")
 def cancel_all_deployments(db: Session = Depends(get_db)):
     active_deps = db.query(Deployment).filter(Deployment.status.in_(['pending', 'building', 'deploying', 'health_check', 'healing', 'live'])).all()

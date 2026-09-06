@@ -161,6 +161,13 @@ export default function ProjectDetail() {
           case 'deployment_failed':
             setDeployment(prev => prev ? { ...prev, status: payload.rolled_back ? 'rolled_back' : 'failed' } : prev);
             break;
+          case 'deployment_resumed':
+            if (payload.deployment_id === depId) {
+              setDeployment(prev => prev ? { ...prev, status: 'pending' } : prev);
+              setDiagnosis(null);
+              setRemediationAction(null);
+            }
+            break;
         }
       } catch {}
     };
@@ -246,6 +253,22 @@ export default function ProjectDetail() {
     setDeploying(false);
   };
 
+  const handleResume = async () => {
+    if (!deployment?.id) return;
+    setDeploying(true);
+    setDiagnosis(null);
+    setRemediationAction(null);
+    setShadowState('idle');
+    try {
+      const res = await fetch(`/api/deployments/${deployment.id}/resume`, { method: 'POST' });
+      if (res.ok) {
+        setDeployment(prev => ({ ...prev, status: 'pending' }));
+      }
+    } catch {}
+    setDeploying(false);
+  };
+
+
   const handleAutonomyChange = async (mode) => {
     setAutonomyMode(mode);
     await fetch(`/api/projects/${projectId}/autonomy`, {
@@ -305,6 +328,18 @@ export default function ProjectDetail() {
             </a>
           )}
           <AutonomyDial projectId={projectId} currentMode={autonomyMode} onChange={handleAutonomyChange} />
+          
+          {(status === 'failed' || status === 'cancelled' || status === 'rolled_back' || status === 'remediation_proposed') && (
+            <button
+              onClick={handleResume}
+              disabled={deploying || isActive}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded hover:bg-indigo-100 disabled:opacity-50 transition-all"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Resume
+            </button>
+          )}
+
           <button
             onClick={handleDeploy}
             disabled={deploying || isActive}

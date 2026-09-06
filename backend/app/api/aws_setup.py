@@ -69,12 +69,27 @@ def background_setup_task(db: Session, allowed_ssh_cidr: str):
 @router.post("/setup")
 def start_aws_setup(req: SetupRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     import os
+    from dotenv import set_key
+    env_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), '.env')
+
     if req.aws_access_key_id:
         os.environ["AWS_ACCESS_KEY_ID"] = req.aws_access_key_id
+        try:
+            set_key(env_file, "AWS_ACCESS_KEY_ID", req.aws_access_key_id)
+        except Exception:
+            pass
     if req.aws_secret_access_key:
         os.environ["AWS_SECRET_ACCESS_KEY"] = req.aws_secret_access_key
+        try:
+            set_key(env_file, "AWS_SECRET_ACCESS_KEY", req.aws_secret_access_key)
+        except Exception:
+            pass
     if req.aws_region:
         os.environ["AWS_REGION"] = req.aws_region
+        try:
+            set_key(env_file, "AWS_REGION", req.aws_region)
+        except Exception:
+            pass
 
     state = db.query(AWSSetupState).first()
     if state and state.setup_status == 'complete':
