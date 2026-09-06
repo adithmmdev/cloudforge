@@ -1,4 +1,5 @@
 import os
+import subprocess
 import paramiko
 from sqlalchemy.orm import Session
 from app.models.deployment import Deployment
@@ -52,7 +53,7 @@ def trigger_rollback(db: Session, deployment_id: int):
             
             if is_local:
                 cwd = f"/app/uploads/{project.name}"
-                import subprocess
+
                 subprocess.run(["docker", "compose", "-p", f"cloudforge-{project.id}-{deployment_id}", "down"], cwd=cwd)
                 # We can't easily jump to a previous directory in local mode unless it was backed up
                 # We will attempt to use the previous deployment id if we stored it
@@ -67,7 +68,7 @@ def trigger_rollback(db: Session, deployment_id: int):
         else:
             logger.info("Rolling back single container deployment")
             if is_local:
-                import subprocess
+
                 subprocess.run(["docker", "stop", f"proj_{project.id}_{deployment_id}"])
                 subprocess.run(["docker", "rm", "-f", f"proj_{project.id}_{deployment_id}"])
             else:
@@ -83,7 +84,7 @@ def trigger_rollback(db: Session, deployment_id: int):
             
             run_command = f"docker run -d -p {port}:8000 --memory=256m --cpus=0.5 --pids-limit=100 --name proj_{project.id}_{prev_deployment.id}_rollback {tag}"
             if is_local:
-                import subprocess
+
                 subprocess.run(run_command.split())
             else:
                 stdin, stdout, stderr = ssh.exec_command(run_command)

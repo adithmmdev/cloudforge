@@ -157,7 +157,6 @@ def run_deployment_pipeline(db: Session, deployment_id: int):
                     restart_policy = "--restart always"
                     
             if is_local:
-                import subprocess
                 subprocess.run(["docker", "rm", "-f", f"proj_{project.id}_{deployment_id}"], capture_output=True)
                 run_cmd = ["docker", "run", "-d", "-p", "80:8000"]
                 if restart_policy:

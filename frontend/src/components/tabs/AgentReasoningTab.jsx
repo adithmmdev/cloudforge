@@ -66,6 +66,32 @@ export default function AgentReasoningTab({ diagnosis, remediationAction, autono
               <div className="font-bold text-[13px] uppercase text-gray-300">{autonomyMode.replace('_', ' ')}</div>
             </div>
           </div>
+          
+          {remediationAction?.status === 'awaiting_approval' && (
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={async () => {
+                  try {
+                    await fetch(`/api/remediation/${remediationAction.id}/approve`, { method: 'POST' });
+                  } catch (e) {}
+                }}
+                className="px-3 py-1.5 bg-green-900/50 hover:bg-green-800 text-green-300 text-[11px] font-bold rounded border border-green-700 transition-colors"
+              >
+                APPROVE ACTION
+              </button>
+              <button 
+                onClick={async () => {
+                  try {
+                    await fetch(`/api/remediation/${remediationAction.id}/reject`, { method: 'POST' });
+                  } catch (e) {}
+                }}
+                className="px-3 py-1.5 bg-red-900/30 hover:bg-red-900/50 text-red-400 text-[11px] font-bold rounded border border-red-900/50 transition-colors"
+              >
+                REJECT
+              </button>
+            </div>
+          )}
+
           <div className="text-right">
             <div className="text-[10px] text-gray-500">EXECUTION STATUS</div>
             <div className={`font-bold text-[13px] uppercase ${remediationAction?.status === 'discarded' ? 'text-red-400' : 'text-green-400'}`}>
