@@ -72,7 +72,7 @@ export default function AgentReasoningTab({ diagnosis, remediationAction, autono
               <button 
                 onClick={async () => {
                   try {
-                    await fetch(`/api/remediation/${remediationAction.id}/approve`, { method: 'POST' });
+                    await fetch(`/api/remediation-actions/${remediationAction.id}/approve`, { method: 'POST' });
                   } catch (e) {}
                 }}
                 className="px-3 py-1.5 bg-green-900/50 hover:bg-green-800 text-green-300 text-[11px] font-bold rounded border border-green-700 transition-colors"
@@ -82,7 +82,7 @@ export default function AgentReasoningTab({ diagnosis, remediationAction, autono
               <button 
                 onClick={async () => {
                   try {
-                    await fetch(`/api/remediation/${remediationAction.id}/reject`, { method: 'POST' });
+                    await fetch(`/api/remediation-actions/${remediationAction.id}/reject`, { method: 'POST' });
                   } catch (e) {}
                 }}
                 className="px-3 py-1.5 bg-red-900/30 hover:bg-red-900/50 text-red-400 text-[11px] font-bold rounded border border-red-900/50 transition-colors"
