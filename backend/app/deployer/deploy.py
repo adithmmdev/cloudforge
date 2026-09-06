@@ -33,8 +33,7 @@ def run_deployment_pipeline(db: Session, deployment_id: int):
         _record_stage(db, deployment, "provisioning", "Resolving a CloudForge-managed EC2 instance")
         logger.info(f"Deployment {deployment_id}: Provisioning EC2 instance")
         if not is_local:
-            instance = provision_instance(db)
-            deployment.instance_id = instance.id
+            instance = provision_instance(db, deployment_id=deployment.id)
             db.commit()
             
         # Step 2: Build Image

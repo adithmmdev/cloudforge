@@ -29,7 +29,7 @@ echo "=== CloudForge Bootstrap Complete ==="
 echo "Finished: $(date -u)"
 """
 
-def provision_instance(db: Session, max_instances: int = None) -> Instance:
+def provision_instance(db: Session, max_instances: int = None, deployment_id: int = None) -> Instance:
     if max_instances is None:
         max_instances = int(os.getenv("MAX_EC2_INSTANCES", "3"))
 
@@ -69,54 +69,68 @@ def provision_instance(db: Session, max_instances: int = None) -> Instance:
             
     db.flush()
     
-    # 3. REUSE
-    active_inst = next((i for i in db_map.values() if i.status in ('running', 'pending')), None)
-    if active_inst:
+    active_instances = [i for i in db_map.values() if i.status in ('running', 'pending')]
+    stopped_instances = [i for i in db_map.values() if i.status == 'stopped']
+    
+    # 3. USE EXISTING RUNNING
+    if active_instances:
+        active_inst = active_instances[0]
         if active_inst.status == 'pending':
-            db.commit()
             _wait_for_running(ec2, active_inst.aws_instance_id)
             updated_aws = ec2.describe_instances(InstanceIds=[active_inst.aws_instance_id])
             inst_data = updated_aws['Reservations'][0]['Instances'][0]
             active_inst.status = 'running'
             active_inst.public_ip = inst_data.get('PublicIpAddress')
             db.commit()
-        else:
-            db.commit()
             
+        if deployment_id:
+            from app.models.deployment import Deployment
+            dep = db.query(Deployment).get(deployment_id)
+            if dep:
+                dep.instance_id = active_inst.id
+                db.commit()
+                
         _wait_for_readiness(active_inst, db)
         return active_inst
         
-    # 4. RESTART
-    stopped_inst = next((i for i in db_map.values() if i.status == 'stopped'), None)
-    if stopped_inst:
-        ec2.start_instances(InstanceIds=[stopped_inst.aws_instance_id])
+    # 4. START STOPPED
+    if stopped_instances:
+        stopped_inst = stopped_instances[0]
         stopped_inst.status = 'pending'
         db.commit()
         
+        ec2.start_instances(InstanceIds=[stopped_inst.aws_instance_id])
         _wait_for_running(ec2, stopped_inst.aws_instance_id)
         
         updated_aws = ec2.describe_instances(InstanceIds=[stopped_inst.aws_instance_id])
         inst_data = updated_aws['Reservations'][0]['Instances'][0]
+        
         stopped_inst.status = 'running'
         stopped_inst.public_ip = inst_data.get('PublicIpAddress')
         db.commit()
         
+        if deployment_id:
+            from app.models.deployment import Deployment
+            dep = db.query(Deployment).get(deployment_id)
+            if dep:
+                dep.instance_id = stopped_inst.id
+                db.commit()
+                
         _wait_for_readiness(stopped_inst, db)
         return stopped_inst
         
-    # 5. CREATE
-    active_count = sum(1 for i in db_map.values() if i.status in ('pending', 'running', 'stopped'))
-    if active_count >= max_instances:
-        raise RuntimeError("Instance cap reached. Cannot provision more EC2 instances.")
+    # 5. CREATE NEW
+    if len(active_instances) + len(stopped_instances) >= max_instances:
+        raise RuntimeError("EC2 cap reached")
         
     setup_state = db.query(AWSSetupState).filter_by(setup_status='complete').first()
     if not setup_state:
-        ami_id = os.getenv("EC2_AMI_ID")
-        sg_id = os.getenv("EC2_SECURITY_GROUP_ID")
-        key_name = os.getenv("EC2_KEY_PAIR_NAME")
-        subnet_id = os.getenv("EC2_SUBNET_ID")
-        if not (ami_id and sg_id and key_name):
-            raise RuntimeError("Missing AWS configuration. Run setup wizard or set .env manually.")
+        ami_id = os.getenv('EC2_AMI_ID')
+        sg_id = os.getenv('EC2_SECURITY_GROUP_ID')
+        key_name = os.getenv('EC2_KEY_PAIR_NAME')
+        subnet_id = os.getenv('EC2_SUBNET_ID')
+        if not all([ami_id, sg_id, key_name]):
+            raise RuntimeError("Missing required AWS setup vars")
     else:
         ami_id = setup_state.ami_id
         sg_id = setup_state.security_group_id
@@ -157,6 +171,13 @@ def provision_instance(db: Session, max_instances: int = None) -> Instance:
     new_inst.public_ip = inst_data.get('PublicIpAddress')
     db.commit()
     
+    if deployment_id:
+        from app.models.deployment import Deployment
+        dep = db.query(Deployment).get(deployment_id)
+        if dep:
+            dep.instance_id = new_inst.id
+            db.commit()
+            
     _wait_for_readiness(new_inst, db)
     return new_inst
 
