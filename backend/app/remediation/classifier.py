@@ -44,7 +44,7 @@ def classify_error(logs_or_status: str) -> dict:
     # LLM Fallback Triage
     log_text = f"{logs_or_status[:1000]}\n...\n{logs_or_status[-1000:]}" if len(logs_or_status) > 2000 else logs_or_status
     prompt = f"""
-Analyze the following deployment error log and classify it.
+Analyze the following deployment error log and classify it. If you cannot classify it, output "unclassified".
 Output ONLY a JSON object with two keys:
 - error_class: A short snake_case string classifying the error.
 - extracted_token: The specific missing file, module, env var, or package name if applicable (else empty string).
