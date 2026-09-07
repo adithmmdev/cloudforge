@@ -105,10 +105,6 @@ def provision_instance(db: Session, max_instances: int = None, deployment_id: in
         updated_aws = ec2.describe_instances(InstanceIds=[stopped_inst.aws_instance_id])
         inst_data = updated_aws['Reservations'][0]['Instances'][0]
         
-        stopped_inst.status = 'running'
-        stopped_inst.public_ip = inst_data.get('PublicIpAddress')
-        db.commit()
-        
         if deployment_id:
             from app.models.deployment import Deployment
             dep = db.query(Deployment).get(deployment_id)
@@ -116,6 +112,10 @@ def provision_instance(db: Session, max_instances: int = None, deployment_id: in
                 dep.instance_id = stopped_inst.id
                 db.commit()
                 
+        stopped_inst.status = 'running'
+        stopped_inst.public_ip = inst_data.get('PublicIpAddress')
+        db.commit()
+        
         _wait_for_readiness(stopped_inst, db)
         return stopped_inst
         
@@ -167,10 +167,6 @@ def provision_instance(db: Session, max_instances: int = None, deployment_id: in
     updated_aws = ec2.describe_instances(InstanceIds=[new_aws_id])
     inst_data = updated_aws['Reservations'][0]['Instances'][0]
     
-    new_inst.status = 'running'
-    new_inst.public_ip = inst_data.get('PublicIpAddress')
-    db.commit()
-    
     if deployment_id:
         from app.models.deployment import Deployment
         dep = db.query(Deployment).get(deployment_id)
@@ -178,6 +174,10 @@ def provision_instance(db: Session, max_instances: int = None, deployment_id: in
             dep.instance_id = new_inst.id
             db.commit()
             
+    new_inst.status = 'running'
+    new_inst.public_ip = inst_data.get('PublicIpAddress')
+    db.commit()
+    
     _wait_for_readiness(new_inst, db)
     return new_inst
 

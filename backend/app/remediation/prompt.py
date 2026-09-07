@@ -51,7 +51,7 @@ Response: {{"reasoning": "Root Cause: npm cannot resolve a matching version for 
 
 Example 4:
 Error Signature: {{"error_class": "unclassified", "extracted_token": "", "service": "app"}}
-Response: {{"reasoning": "Root Cause: Unknown.\\nEvidence: Error signature is unclassified with no extracted token.\\nAction: No safe remediation can be automatically applied. Escalating to NONE.", "action_type": "NONE", "params": {{}}, "confidence": 1.0}}
+Response: {{"reasoning": "Root Cause: Unknown.\\nEvidence: Error signature is unclassified with no extracted token.\\nAction: No safe remediation can be automatically applied. Escalating to NONE.", "action_type": "NONE", "params": {{}}, "confidence": 0.0}}
 """
 
 import re

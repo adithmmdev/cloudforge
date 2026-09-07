@@ -114,13 +114,14 @@ def run_orchestration_loop(db: Session, deployment_id: int):
                     terminal_status = "failed"
                     return {"status": "failed", "failure_id": failure.id, "message": "suggest_only mode: stopped after failure"}
                     
+                actual_exit_code = getattr(e, 'exit_code', 1)
                 sig = create_redacted_signature(
                     error_class=classification["error_class"],
                     framework=framework,
                     deployment_type=deployment_type,
                     service=service,
                     extracted_token=classification.get("extracted_token"),
-                    exit_code=1,
+                    exit_code=actual_exit_code,
                     attempt_number=attempt_number
                 )
                 

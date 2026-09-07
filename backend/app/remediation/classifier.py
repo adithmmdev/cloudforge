@@ -42,6 +42,7 @@ def classify_error(logs_or_status: str) -> dict:
     import json
     
     # LLM Fallback Triage
+    log_text = f"{logs_or_status[:1000]}\n...\n{logs_or_status[-1000:]}" if len(logs_or_status) > 2000 else logs_or_status
     prompt = f"""
 Analyze the following deployment error log and classify it.
 Output ONLY a JSON object with two keys:
@@ -49,7 +50,7 @@ Output ONLY a JSON object with two keys:
 - extracted_token: The specific missing file, module, env var, or package name if applicable (else empty string).
 
 Log:
-{logs_or_status[-1000:]}
+{log_text}
 """
     try:
         res = requests.post(

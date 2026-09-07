@@ -30,7 +30,7 @@ container, and only then promotes it to the live deployment. Every step is visib
 in a "Mission Control" dashboard. **[v4]** After every successful deployment, a structured
 Deployment Report is auto-generated and downloadable.
 
-Six things make this more than "an LLM retry loop," and are what's worth explaining in an
+Seven things make this more than "an LLM retry loop," and are what's worth explaining in an
 interview:
 
 1. **Constrained Remediation Grammar** — the LLM never generates arbitrary code or commands. It
@@ -39,7 +39,8 @@ interview:
 2. **Privacy-Tiered LLM Routing** — a local model triages every failure first. Only a redacted,
    code-free "failure signature" is ever sent to a cloud API, and only when local confidence is
    too low. Every disclosure is logged verbatim in an auditable ledger. **[NEW]** The cloud tier
-   itself is provider-agnostic (Claude / GLM / NVIDIA NIM), swappable via config.
+   itself is provider-agnostic (Claude / GLM / NVIDIA NIM), swappable via config. In production,
+   it runs Moonshot AI's Kimi K3 over NVIDIA NIM.
 3. **Shadow Verification Gate** — no proposed fix reaches the real deployment until it passes a
    functional smoke test in a disposable local container.
 4. **[NEW] Bounded Autonomous Infrastructure Provisioning** — the platform provisions its own EC2
@@ -53,6 +54,12 @@ interview:
 6. **[v4] Deployment Documentation Generator** — every successful deployment produces a structured
    report (infrastructure, services, timeline, health results, remediation history) downloadable
    as Markdown from the dashboard.
+7. **Interactive Deployment Intelligence ("Niggex AI")** — beyond autonomous background remediation,
+   CloudForge embeds an interactive Mission Control Copilot powered by Moonshot AI's Kimi K3 (via
+   NVIDIA NIM streaming). It classifies developer questions across 10 operational categories, executes
+   a sub-10ms deterministic fast-path for operational state, extracts context across 14 database/telemetry
+   tools under a sandboxed file-reading boundary, and streams token-by-token guidance via Server-Sent
+   Events (SSE), complete with an ISP DPI bypass proxy and offline fallback synthesis.
 
 ---
 
@@ -148,7 +155,10 @@ If asked to build any "out of scope" item mid-build, treat it as a scope-change 
 | Docker SDK | docker (Python) | 7.1.x |
 | Templating | Jinja2 | 3.1.x |
 | Local LLM runtime | Ollama | latest stable; model `qwen2.5-coder:7b-instruct` (>=8GB RAM/VRAM; `llama3.1:8b` is an acceptable substitute). **Do not replace this with a hosted API** — the local tier only means something if it's actually local. |
-| Cloud LLM client | **[NEW] provider-agnostic** — Anthropic SDK for `anthropic`, OpenAI SDK (base-URL override) for `glm` and `nvidia_nim` | see §9 for the full comparison and config keys |
+| Cloud LLM & Kimi Engine | NVIDIA NIM / Moonshot AI | `moonshotai/kimi-k3` via NVIDIA NIM (`https://integrate.api.nvidia.com/v1`); OpenAI-compatible streaming API. Pluggable factory retains support for `anthropic` and `glm`. |
+| Interactive Copilot ("Niggex AI") | Moonshot AI Kimi K3 | SSE streaming (`/api/copilot/sessions/{id}/messages`), multi-turn session history in PostgreSQL, token accounting, and 14 operational context tools. |
+| Copilot Transport & Proxy | FastAPI + httpx | Async `StreamingResponse` with SSE keepalive pings; reverse streaming proxy (`/api/proxy/chat/completions`) to bypass ISP Deep Packet Inspection (DPI) blocks. |
+| Copilot Classifier & Fast-Path | Deterministic + Regex | 10-category intent classifier with sub-10ms, 0-token deterministic bypass for status, timing, and infrastructure queries. |
 | Test runner | pytest | 8.x |
 | Database | PostgreSQL | 16 (`postgres:16` image for local dev) |
 | Frontend | React | 18.2.0 |
@@ -220,7 +230,7 @@ cloudforge/
 │   ├── app/
 │   │   ├── main.py
 │   │   ├── api/                         # projects.py, deployments.py, remediation.py, ws.py,
-│   │   │                                # aws_setup.py [v4]
+│   │   │                                # aws_setup.py [v4], copilot.py [NEW], proxy.py [NEW]
 │   │   ├── orchestrator/                # pipeline sequencing, autonomy-mode gating
 │   │   ├── detector/
 │   │   │   ├── registry.py              # [NEW] adapter registry — detect_fn, template(s), deployment_type
@@ -242,16 +252,24 @@ cloudforge/
 │   │   ├── metrics/
 │   │   ├── remediation/
 │   │   │   ├── classifier.py
-│   │   │   ├── grammar.py              # includes RESTART_SERVICE [NEW]
+│   │   │   ├── grammar.py              # includes RESTART_SERVICE, CHANGE_INTERNAL_PORT, ADD_RUN_COMMAND
 │   │   │   ├── local_llm.py
-│   │   │   ├── llm_client_factory.py   # [NEW] anthropic | glm | nvidia_nim
+│   │   │   ├── llm_client_factory.py   # [NEW] anthropic | glm | nvidia_nim (Kimi K3)
 │   │   │   ├── redactor.py
 │   │   │   └── shadow.py
+│   │   ├── copilot/                     # [NEW] Interactive Deployment Copilot ("Niggex AI")
+│   │   │   ├── classifier.py            # 10-category operational intent classifier
+│   │   │   ├── deterministic.py         # sub-10ms fast-path responses for status/timing
+│   │   │   ├── tools.py                 # 14 telemetry & DB evidence extraction tools
+│   │   │   ├── context_builder.py       # dynamic prompt synthesis from live telemetry
+│   │   │   ├── security.py              # project directory sandbox, path & secret filter
+│   │   │   └── kimi_client.py           # Moonshot Kimi K3 streaming client (NVIDIA NIM)
 │   │   ├── aws_setup/                   # [v4] SG creation, key-pair gen, AMI lookup, IAM validation
 │   │   │   └── setup_service.py
 │   │   ├── doc_generator/               # [v4] deployment documentation generator
 │   │   │   └── generator.py
-│   │   ├── models/
+│   │   ├── models/                      # project, deployment, container, failure, diagnosis,
+│   │   │                                # disclosure, copilot_session, copilot_message [NEW]
 │   │   └── db/
 │   ├── alembic/
 │   ├── tests/
@@ -276,11 +294,13 @@ cloudforge/
 ├── frontend/
 │   ├── src/
 │   │   ├── pages/                       # Upload, Dashboard, ProjectDetail, Settings,
-│   │   │                                # AWSSetup [v4]
+│   │   │                                # AWSSetup [v4], CopilotPage ("Niggex AI") [NEW]
 │   │   ├── components/                  # Timeline, LogConsole, MetricsChart, ReasoningTrace,
 │   │   │                                # DisclosureLedger, ShadowVerificationPanel, AutonomyDial,
 │   │   │                                # ServiceList [NEW], DeploymentReport [v4],
-│   │   │                                # AWSSetupWizard [v4]
+│   │   │                                # AWSSetupWizard [v4], copilot/ (ChatMessage,
+│   │   │                                # ChatInput, QuickActions, SessionSidebar) [NEW]
+│   │   ├── hooks/                       # useCopilotStream.js [NEW]
 │   │   └── api/
 │   ├── package.json
 │   └── Dockerfile
@@ -292,6 +312,12 @@ cloudforge/
 ---
 
 ## 6. System Architecture
+
+CloudForge operates with a **dual AI system architecture**:
+1. **Autonomous Self-Healing Deployment Loop** (background pipeline)
+2. **Interactive Mission Control Copilot — "Niggex AI"** (foreground streaming assistant)
+
+### 6a. Autonomous Deployment & Remediation Architecture
 
 ```
 User --> Frontend --> Backend/API --> Orchestrator --> BuildService --> (image[s])
@@ -309,26 +335,81 @@ User --> Frontend --> Backend/API --> Orchestrator --> BuildService --> (image[s
                           |         OR docker compose up for MERN)
                           |         |
                           |         +---> [failure] --> Remediation Loop:
-                          |               1. Classifier (regex) --> error_class
-                          |               2. Redactor --> redacted signature (no source/secrets)
-                          |               3. Local LLM (Ollama) --> proposed action + confidence
-                          |               4. IF confidence < threshold:
-                          |                     Cloud LLM (provider from config) <-- signature ONLY
-                          |                     (logged to Disclosure Ledger)
-                          |               5. Grammar validator --> reject if outside closed action set
+                          |               1. Classifier (regex + LLM triage) --> error_class + token
+                          |               2. Redactor --> 7-field redacted signature (no source/secrets)
+                          |               3. Local LLM (Ollama: Qwen 2.5 Coder 7B) --> action + confidence
+                          |               4. IF confidence < threshold (0.75):
+                          |                     Pre-call audit write to Disclosure Ledger
+                          |                     Cloud LLM: Moonshot AI Kimi K3 via NVIDIA NIM
+                          |                     (<-- redacted signature ONLY)
+                          |               5. Grammar validator --> reject if outside 10-action closed set
                           |               6. Shadow Verifier --> disposable local container(s) + smoke tests
-                          |               7. IF pass: promote per Autonomy Mode
-                          |                  IF fail: retry (max 3) --> else escalate to human
+                          |               7. IF pass: promote per Autonomy Mode (full_auto/approve_each)
+                          |                  IF fail: record rejection fingerprint, retry (max 3) --> human handoff
                           |
                           +---> Monitoring --> docker stats --> Postgres --> WebSocket --> Frontend
                           |
                           +---> [v4] Doc Generator --> deployment report --> Postgres + downloadable MD
 ```
 
+### 6b. Niggex AI Copilot Architecture (Interactive Intelligence)
+
+```
+User (Copilot UI) <==== SSE Stream (keepalive comments) ====> Copilot API (/api/copilot)
+                                                                     |
+                                  +----------------------------------+
+                                  |
+                                  v
+                       Intent Classifier (10 operational categories)
+                                  |
+               +------------------+------------------+
+               |                                     |
+               v [Simple Status/Timing]              v [Complex / Reasoning / Analysis]
+       Deterministic Fast-Path               Context Builder (14 Telemetry & DB Tools)
+       • Live Status & Elapsed Time          • Deployment stages, timings & recent events
+       • AWS EC2 State & Public IP           • Error excerpts & build/container logs
+       • Project framework details           • Container CPU/Memory metrics
+       • Instant return (sub-10ms, 0 tokens) • Shadow verification results
+                                             • Remediation actions & Qwen/Kimi diagnoses
+                                             • Disclosure ledger audit summary
+                                             • Sandboxed file tree & search (§9a Security)
+                                                     |
+                                                     v
+                                             Security & Secret Sandbox
+                                             • Path traversal enforcement
+                                             • Sensitive file & extension blacklist
+                                             • Regex credential scrubbing
+                                                     |
+                                                     v
+                                             Anti-Hallucination System Prompt
+                                                     |
+                                                     v
+                                             Async Worker Thread Pool
+                                             (Non-blocking FastAPI event loop)
+                                                     |
+                                      +--------------+--------------+
+                                      |                             |
+                             Direct Integration              ISP DPI Bypass Proxy
+                                      v                             v
+                              integrate.api.nvidia.com       /api/proxy/chat/completions
+                              Moonshot AI Kimi K3            (Render Reverse Proxy)
+                                      |                             |
+                                      +--------------+--------------+
+                                                     |
+                                                     v (token chunk stream)
+                                      SSE Response Generator
+                                      (Tokens + Thinking states + Evidence drawer metadata)
+                                                     |
+                                                     v
+                                      PostgreSQL Persistence
+                                      (copilot_sessions, copilot_messages)
+```
+
 **Components:** Frontend, Backend/API, Orchestrator, Build Service, **EC2 Provisioner [NEW]**,
-Deployer, Monitoring, Database, **AWS Setup Service [v4]**, **Doc Generator [v4]**, and the
-remediation modules: Classifier, Redactor, Local/Cloud LLM clients (behind a provider factory
-**[NEW]**), Grammar Validator, Shadow Verifier.
+Deployer, Monitoring, Database, **AWS Setup Service [v4]**, **Doc Generator [v4]**, the
+autonomous remediation modules (Classifier, Redactor, Local/Cloud LLM clients, Grammar Validator,
+Shadow Verifier), and the **Niggex AI Copilot modules [NEW]** (Intent Classifier, Deterministic
+Responder, Context Builder, 14 Telemetry Tools, Security Sandbox, Kimi K3 Client, Streaming Proxy).
 
 ---
 
@@ -490,6 +571,30 @@ CREATE TABLE deployment_reports (
   report_markdown TEXT NOT NULL,
   generated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- [v4 / NEW] Interactive Copilot ("Niggex AI") session and message persistence
+CREATE TABLE copilot_sessions (
+  id SERIAL PRIMARY KEY,
+  project_id INT REFERENCES projects(id) ON DELETE SET NULL,
+  deployment_id INT REFERENCES deployments(id) ON DELETE SET NULL,
+  title TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX idx_copilot_sessions_project ON copilot_sessions(project_id);
+
+CREATE TABLE copilot_messages (
+  id SERIAL PRIMARY KEY,
+  session_id INT NOT NULL REFERENCES copilot_sessions(id) ON DELETE CASCADE,
+  role TEXT NOT NULL,            -- 'user' | 'assistant'
+  content TEXT NOT NULL,
+  model TEXT,                    -- 'kimi-k3' | 'deterministic' | 'local-fallback'
+  evidence_refs JSONB,           -- tools called & category metadata
+  tokens_in INT,
+  tokens_out INT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX idx_copilot_messages_session ON copilot_messages(session_id);
 ```
 
 ---
@@ -497,22 +602,24 @@ CREATE TABLE deployment_reports (
 ## 8. The Constrained Remediation Grammar
 
 **The LLM (local or cloud, whichever provider) never produces free-form code, shell commands, or
-Dockerfile/compose text. It only ever returns one of the seven actions below.**
+Dockerfile/compose text. It only ever returns one of the ten actions below.**
 
 | `action_type` | Params | Safety envelope |
 |---|---|---|
-| `ADD_DEPENDENCY` | `{package, version, manifest, service}` | `service` defaults to `"app"`; for MERN must be `"client"` or `"server"`, mapping to that folder's manifest; `package` must match `^[a-zA-Z0-9_\-\.]+$` |
+| `ADD_DEPENDENCY` | `{package, version, manifest, service}` | `service` defaults to `"app"`; for MERN must be `"client"` or `"server"`, mapping to that folder's manifest; `package` must match `^@?[a-zA-Z0-9_\-\.\/]+$` |
 | `CHANGE_BASE_IMAGE` | `{image_tag, service}` | `image_tag` must be in the allowlist: `python:3.12-slim`, `python:3.11-slim`, `node:18-slim`, `node:18`, `nginx:alpine`, `mongo:7` |
 | `EXPOSE_PORT` | `{port, service}` | `1 <= port <= 65535`; for compose deployments only `"client"` may bind a host port — reject attempts to expose `server` or `mongo` externally |
+| `CHANGE_INTERNAL_PORT` **[v4]** | `{port, service}` | `1 <= port <= 65535`; adapts internal backend or reverse-proxy communication without exposing host ports |
 | `SET_START_COMMAND` | `{cmd, service}` | **[v4]** `cmd` must be a JSON array of strings (Dockerfile `CMD` exec form), e.g. `["uvicorn", "app.main:app", "--host", "0.0.0.0"]`. `cmd[0]` must be one of: `uvicorn`, `gunicorn`, `node`, `nginx`, `python` |
 | `INCREASE_MEMORY_LIMIT` | `{mb, service}` | `128 <= mb <= 1024` |
 | `SET_ENV_VAR` | `{key, value, service}` | Reject if `key` matches `(?i)(secret\|token\|password\|api[_-]?key)`. **[v4]** Also reject if `value` matches `://[^:]+:[^@]+@` (embedded credentials in URIs) or if `value` is longer than 500 characters (likely a key/cert blob). |
 | `RESTART_SERVICE` **[NEW]** | `{service}` | `service` must be one of the deployment's own known `service_name` values (queried from `containers` for that `deployment_id`) — cannot target anything outside the current deployment |
+| `ADD_RUN_COMMAND` **[v4]** | `{cmd, service}` | `cmd` must be non-empty string; inserts build steps (e.g., `npm run build`) into the Dockerfile prior to the `CMD` phase |
 | `NONE` | `{}` | Escalate (if local) or hand off to human (if cloud) |
 
 `service` defaults to `"app"` for single-container deployments and is required for compose
 deployments. Any response with an `action_type` outside this table, or params that fail
-validation, is discarded — never retried with a "fixed-up" version.
+validation, is discarded — never retried with a "fixed-up" version. Past rejected actions are fingerprinted and barred from repeating.
 
 ### 8a. EC2 Provisioning Cap (safety rule for the new automation)
 
@@ -611,16 +718,14 @@ prompt contract are identical across all three; only the client differs:
 
 | Provider | `CLOUD_LLM_PROVIDER` value | Client | Notes |
 |---|---|---|---|
-| Anthropic | `anthropic` | Anthropic SDK | Recommended default — most consistent structured-JSON output for this task. `claude-haiku-4-5-20251001` is cheap and fast enough. |
-| Z.ai GLM | `glm` | OpenAI SDK, `base_url=GLM_BASE_URL` | GLM-4.6 is priced around $0.43/1M input, $1.75/1M output tokens with a 200K context window, and benchmarks close to Claude Sonnet-tier on coding/agentic tasks. GLM also publishes genuinely free rate-limited models (e.g. a "Flash" tier) — good for zero-cost development. OpenAI-SDK compatible: only the base URL and model string change. |
-| NVIDIA NIM | `nvidia_nim` | OpenAI SDK, `base_url=NVIDIA_NIM_BASE_URL` | Hosted endpoints are free for prototyping (rate-limited, roughly 40 requests/minute), OpenAI-compatible request shape, and the catalog includes cheap Nemotron Nano/Super variants (as low as ~$0.20/1M tokens combined) alongside many third-party open models. Good zero-cost or near-zero-cost option and a useful comparison point against GLM/Claude. |
+| **Moonshot AI (Kimi K3) via NVIDIA NIM** | `nvidia_nim` | OpenAI SDK / requests, `base_url=NVIDIA_NIM_BASE_URL` | **Active Production Default.** Uses `moonshotai/kimi-k3` hosted on NVIDIA NIM. Delivers state-of-the-art multi-step reasoning, large context handling, and highly reliable structured JSON output for complex deployment diagnosis and interactive copilot streaming. |
+| Anthropic | `anthropic` | Anthropic SDK | Alternate provider — consistent structured-JSON output. `claude-haiku-4-5-20251001` is fast and cost-effective. Supported via factory interface. |
+| Z.ai GLM | `glm` | OpenAI SDK, `base_url=GLM_BASE_URL` | Alternate provider — GLM-4.6 priced around $0.43/1M input, $1.75/1M output tokens with a 200K context window. OpenAI-SDK compatible via base URL override. |
 
 **Implementation note:** build `llm_client_factory.py` so the redactor/prompt/parsing code is
-provider-agnostic — it should not need to know which provider answered. Only the HTTP client
-construction (API key + base URL + model string) branches on `CLOUD_LLM_PROVIDER`. **Before
-shipping, verify the exact current model slug and endpoint path for whichever provider you pick
-in that provider's own docs** — these catalogs change and a stale hardcoded slug will silently
-404 or route to the wrong model.
+provider-agnostic — it should not need to know which provider answered. In our platform implementation,
+the factory enforces `moonshotai/kimi-k3` over NVIDIA NIM (`nvidia_nim_api`) as the verified cloud tier,
+while maintaining seamless swappability with Anthropic and GLM.
 
 **Before the API call is made, insert a row into `disclosures`** (with `destination` set to
 `anthropic_api`/`glm_api`/`nvidia_nim_api` as appropriate) containing the exact JSON being sent.
@@ -628,6 +733,188 @@ in that provider's own docs** — these catalogs change and a stale hardcoded sl
 ### Step 5 — Validate and proceed
 
 Whichever tier and provider answered, validate the response against §8 before doing anything else.
+
+---
+
+## 9a. Interactive Deployment Intelligence — "Niggex AI" & Kimi K3 Copilot Architecture **[NEW]**
+
+CloudForge features an interactive, real-time deployment assistant branded as **Niggex AI**
+(CloudForge Deployment Copilot) in the frontend. While the Autonomous Remediation Loop (§9) runs
+unattended in the background to repair failed infrastructure, Niggex AI operates in the foreground
+to provide developers with an auditable, real-time conversational window into their deployments,
+infrastructure health, logs, and failure post-mortems.
+
+```
++----------------------------------------------------------------------------------------------------+
+|                                    NIGGEX AI COPILOT ARCHITECTURE                                  |
++----------------------------------------------------------------------------------------------------+
+|                                                                                                    |
+|  [ Frontend UI: /copilot ]                                                                         |
+|       │                                                                                            |
+|       │ 1. POST /api/copilot/sessions/{id}/messages (SSE Connection)                               |
+|       ▼                                                                                            |
+|  [ FastAPI Copilot Router (api/copilot.py) ]                                                       |
+|       │                                                                                            |
+|       ├─► [ 10-Category Intent Classifier (copilot/classifier.py) ]                                |
+|       │        │                                                                                   |
+|       │        ├── (CURRENT_STATUS / DEPLOYMENT_TIMING / INFRASTRUCTURE)                           |
+|       │        │        ▼                                                                          |
+|       │        │   [ Deterministic Fast-Path (copilot/deterministic.py) ]                          |
+|       │        │        └─► Direct DB lookup (0 tokens, <10ms) ───────────────┐                    |
+|       │        │                                                              │                    |
+|       │        └── (FAILURE_EXPLANATION / LOGS / CODE / REMEDIATION / etc.)   │                    |
+|       │                 ▼                                                     │                    |
+|       ├─► [ Context Builder (copilot/context_builder.py) ]                    │                    |
+|       │        │                                                              │                    |
+|       │        ├── Invokes targeted subset of 14 Telemetry Tools (tools.py)   │                    |
+|       │        └── Sandboxed Codebase Reader & Search (copilot/security.py)   │                    |
+|       │                 ▼                                                     │                    |
+|       ├─► [ Anti-Hallucination System Prompt Synthesis ]                      │                    |
+|       │        │                                                              │                    |
+|       │        ▼                                                              │                    |
+|       ├─► [ Moonshot AI Kimi K3 Client (copilot/kimi_client.py) ]             │                    |
+|       │        │                                                              │                    |
+|       │        ├── Async Thread Pool Producer (loop.run_in_executor)          │                    |
+|       │        ├── asyncio.Queue (Non-blocking token buffer)                  │                    |
+|       │        │                                                              │                    |
+|       │        ├── Direct Route: https://integrate.api.nvidia.com/v1          │                    |
+|       │        └── DPI Bypass Route: /api/proxy/chat/completions (Render)     │                    |
+|       │                 ▼                                                     │                    |
+|       └─► [ SSE Stream Generator ] ◄──────────────────────────────────────────┘                    |
+|                │                                                                                   |
+|                ├── event: copilot_thinking  (multi-step indicator)                                 |
+|                ├── event: copilot_context   (auditable tool evidence list)                         |
+|                ├── event: copilot_token     (live token stream chunks)                             |
+|                ├── : keepalive              (20s comment ping for reverse proxies)                 |
+|                └── event: copilot_done      (token usage accounting & model ID)                    |
+|                         │                                                                          |
+|                         ▼                                                                          |
+|            [ PostgreSQL Persistence: copilot_sessions & copilot_messages ]                         |
+|                                                                                                    |
++----------------------------------------------------------------------------------------------------+
+```
+
+### 1. Intent Classification Engine (`copilot/classifier.py`)
+
+Incoming developer queries are analyzed by a fast heuristic classifier across 10 distinct
+operational categories:
+
+| Category | Typical Query Triggers | Context Strategy | Needs Kimi |
+|---|---|---|---|
+| `CURRENT_STATUS` | "what stage", "where are we", "is it live", "deployment status" | Status, elapsed time, current stage | No (Fast-Path) |
+| `DEPLOYMENT_TIMING`| "why slow", "how long", "taking time", "still building" | Stage transition timings, elapsed seconds | No (Fast-Path) |
+| `INFRASTRUCTURE` | "ec2", "aws", "instance", "server state", "is aws live" | Instance ID, public IP, EC2 status | No (Fast-Path) |
+| `FAILURE_EXPLANATION` | "why did it fail", "what went wrong", "what caused error" | Recent errors, stderr, failure record | Yes |
+| `LOG_ANALYSIS` | "show logs", "build log", "container log", "output", "stdout" | Last 150 log lines across build/container | Yes |
+| `METRIC_ANALYSIS` | "cpu", "memory", "ram", "metrics", "resource usage" | Time-series container CPU/RAM stats | Yes |
+| `SHADOW` | "shadow", "verification", "smoke test", "sandbox" | Shadow test pass/fail results and output | Yes |
+| `REMEDIATION` | "qwen", "kimi", "what did ai do", "remediation action" | Diagnosis reasoning, proposed actions | Yes |
+| `PROJECT_CODE` | "why is login failing", "read file", "route", "endpoint" | Sandboxed project file tree & source | Yes |
+| `DEPLOYMENT_HISTORY` | "last deployment", "previous deployment", "compare" | Past 10 deployments & elapsed durations | Yes |
+
+### 2. Zero-Token Deterministic Fast-Path (`copilot/deterministic.py`)
+
+To eliminate latency and eliminate unnecessary cloud spend, operational status questions that have
+exact answers in local PostgreSQL are intercepted before invoking Kimi K3:
+- **Greeting Fast-Path:** Intercepts standard greetings (`hi`, `hello`, `hey`, etc.) and immediately
+  streams the platform introduction and capabilities without model invocation.
+- **Status & Timing Interceptor:** Inquiries such as `"is it live"`, `"what stage"`, `"how long"`,
+  and `"is ec2"` return formatted markdown within 10ms directly from DB records.
+- **Provenance Tagging:** Responses from the fast-path are stored with `model = 'deterministic'` and
+  `tokens_in = 0`, preserving complete auditability in `copilot_messages`.
+
+### 3. Context Builder & Telemetry Toolset (`copilot/tools.py` & `copilot/context_builder.py`)
+
+When high-level reasoning or diagnosis is required (`needs_kimi == True`), the Context Builder
+dynamically queries a rich suite of 14 operational tools:
+
+1. `get_current_deployment(project_id)` — latest deployment state, start/finish timestamps, elapsed seconds.
+2. `get_deployment_status(dep_id)` — comprehensive deployment metadata and instance bindings.
+3. `get_deployment_timeline(dep_id)` — chronological sequence of all pipeline stage events.
+4. `get_stage_timings(dep_id)` — exact execution duration computed per stage.
+5. `get_recent_events(dep_id, n=20)` — recent stage transitions with execution details.
+6. `get_recent_errors(dep_id)` — parsed failure events, error classes, and error messages.
+7. `get_build_logs(dep_id, n=150)` — tail of build and container logs (`stdout`, `stderr`).
+8. `get_deployment_metrics(dep_id)` — historical CPU percent and memory usage per service.
+9. `get_ec2_status(project_id)` — AWS instance ID, reconciliation status, and public IP.
+10. `get_service_status(dep_id)` — multi-container status, assigned host ports, and image tags.
+11. `get_shadow_results(dep_id)` — smoke test execution records, pass/fail status, and raw test output.
+12. `get_remediation_history(dep_id)` — proposed actions, safety status, and promotion state.
+13. `get_qwen_result(dep_id)` / `get_kimi_result(dep_id)` — local and cloud diagnosis records, confidence scores, and reasoning.
+14. `get_disclosure_summary(dep_id)` — redacted privacy signatures transmitted to cloud APIs.
+
+### 4. Security Sandbox & File Access Boundaries (`copilot/security.py`)
+
+When developer inquiries involve project code (`PROJECT_CODE`), Copilot can inspect the uploaded
+project's file hierarchy, search code, and read file excerpts. This is strictly constrained by a
+four-layer security boundary:
+1. **Path Traversal Protection:** Every requested path is resolved against `/app/uploads/<project>`
+   and strictly verified using `target_path.resolve().startswith(base_dir.resolve())`. Any traversal
+   attempt (`../`) immediately raises a `403/ValueError`.
+2. **Blocked Sensitive Filenames:** Blacklisted files are rejected on sight:
+   `.env`, `.env.local`, `.env.production`, `id_rsa`, `id_ed25519`, `credentials`.
+3. **Blocked File Extensions:** Key and certificate extensions are permanently inaccessible:
+   `.pem`, `.key`, `.p12`, `.pfx`, `.crt`, `.cer`.
+4. **Secret Content Filter:** If a file contains `-----BEGIN` (private keys or certificates) or
+   matches credentials regex patterns (`aws_access_key_id`, `aws_secret_access_key`, `api_key`,
+   `password`), access is denied and the content is suppressed.
+
+### 5. Moonshot AI Kimi K3 Streaming Integration (`copilot/kimi_client.py`)
+
+Kimi K3 (`moonshotai/kimi-k3`) is served via NVIDIA NIM's hosted API (`https://integrate.api.nvidia.com/v1`).
+Key implementation details:
+- **Non-Blocking Async Producer-Consumer Architecture:** Calling synchronous streaming endpoints
+  directly in async route handlers blocks FastAPI's event loop. CloudForge executes `_sync_stream`
+  in a dedicated background thread pool using `loop.run_in_executor(None, _producer)` communicating
+  with an `asyncio.Queue()`. Tokens are yielded asynchronously as they arrive.
+- **SSE Keepalive Comments:** Cloud platforms and reverse proxies (e.g. Render) terminate idle HTTP
+  connections after 55 seconds. During prolonged Kimi reasoning passes, CloudForge emits an SSE
+  comment (`: keepalive\n\n`) every 20 seconds. The frontend ignores comment lines while keeping
+  the connection open.
+- **Request Timeout:** Configured to 90 seconds (`COPILOT_REQUEST_TIMEOUT`) to accommodate multi-service
+  telemetry synthesis and proxy cold starts.
+- **Anti-Hallucination Evidence Grounding:** The system prompt enforces strict rules:
+  - *Answer ONLY from the evidence provided.*
+  - *Explicitly distinguish FACT (from telemetry), INFERENCE (AI reasoning), and UNKNOWN (not in data).*
+  - *Never invent deployment states, logs, or errors.*
+  - *When asked to perform operational actions, instruct the user to use the CloudForge UI controls.*
+
+### 6. Transparent ISP DPI Bypass Reverse Proxy (`api/proxy.py`)
+
+In institutional, educational, or regional network environments where Deep Packet Inspection (DPI)
+or firewall policies block outbound access to `integrate.api.nvidia.com`:
+- CloudForge provides a built-in reverse streaming proxy at `/api/proxy/chat/completions`.
+- Built with `httpx.AsyncClient` using chunked byte streaming (`chunk_size=256`).
+- Deployed seamlessly alongside the backend on Render (`render.yaml`), relaying the Bearer
+  authorization headers and streaming tokens back without buffering.
+- When `NVIDIA_NIM_BASE_URL` contains `render.com` or `onrender.com`, `_IS_PROXY` mode is activated
+  automatically.
+
+### 7. Resilient Database-Backed Fallback Engine
+
+If NVIDIA NIM or Kimi K3 is unreachable (network failure, rate limit HTTP 429, or missing API key),
+Niggex AI never displays a raw error or blank screen. It triggers `_build_fallback()`:
+- Automatically synthesizes a structured Markdown briefing directly from local PostgreSQL data:
+  project metadata, current deployment status, elapsed duration, EC2 public IP and instance state,
+  recent timeline stages, and top error messages.
+- Stored with `model = 'local-fallback'`, ensuring the developer always receives actionable
+  operational insight regardless of cloud connectivity.
+
+### 8. Frontend Experience & Mission Control Integration
+
+In the frontend dashboard:
+- **Dedicated Route:** Accessible via `/copilot` in the primary navigation, labeled **Niggex AI**.
+- **Multi-Turn Session History:** `SessionSidebar` supports creating, renaming, and switching between
+  independent chat sessions per project, persisted in `copilot_sessions`.
+- **Dynamic Thinking Indicator:** Visualizes reasoning stages (`Analyzing request...` ->
+  `Inspecting telemetry & logs...` -> `Generating insights...`) with animated state badges.
+- **Evidence Disclosure Drawer:** Every assistant message includes a collapsible
+  `"Analyzed N evidence sources"` badge. Clicking it reveals the exact backend tools executed and
+  their arguments, providing total transparency into why Niggex AI reached its conclusions.
+- **Quick Action Prompts:** Pre-configured diagnostic shortcuts (`"Why is this slow?"`,
+  `"Explain the latest failure"`, `"Show deployment timeline"`, `"What is Kimi doing?"`,
+  `"Check infrastructure health"`) for one-click troubleshooting.
+- **Token Usage Accounting:** Displays estimated prompt and completion tokens per exchange.
 
 ---
 
@@ -1015,6 +1302,13 @@ never touching application source (§2).
 | POST | `/aws/setup` | `{"aws_access_key_id","aws_secret_access_key","aws_region","allowed_ssh_cidr"}` | **[v4]** `{"setup_id","status"}` — triggers the AWS setup wizard (§23) |
 | GET | `/aws/setup/status` | — | **[v4]** `{"status","security_group_id","key_pair_name","ami_id","subnet_id","iam_validated","error_detail"}` |
 | POST | `/aws/teardown` | — | **[v4]** Deletes the SG and key pair created by setup (not instances) |
+| POST | `/copilot/projects/{project_id}/sessions` | — | **[NEW]** `{"id","project_id","deployment_id","title","created_at"}` — creates copilot session |
+| GET | `/copilot/projects/{project_id}/sessions` | — | **[NEW]** `[{"id","title","messages_count","created_at","updated_at"}]` — list sessions |
+| GET | `/copilot/sessions/{id}` | — | **[NEW]** session metadata with message history, evidence refs & token counts |
+| DELETE | `/copilot/sessions/{id}` | — | **[NEW]** `{"status":"success"}` — deletes session and cascading messages |
+| GET | `/copilot/sessions/{id}/messages` | — | **[NEW]** `[{"id","role","content","model","evidence_refs","created_at"}]` |
+| POST | `/copilot/sessions/{id}/messages` | `{"content": "..."}` | **[NEW]** SSE stream (`copilot_thinking`, `copilot_context`, `copilot_token`, `copilot_done`, `copilot_error`) |
+| POST | `/proxy/chat/completions` | OpenAI payload | **[NEW]** Transparent reverse streaming proxy to NVIDIA NIM to bypass ISP DPI |
 | WS | `/ws/deployments/{id}` | — | see event contract below |
 | WS | `/ws/aws-setup` | — | **[v4]** streams setup wizard progress |
 
@@ -1037,7 +1331,8 @@ never touching application source (§2).
 ## 16. Frontend — Pages & Components
 
 **Pages:** Upload/New Project, Dashboard, Project Detail (tabs below), Settings (Autonomy dial),
-**AWS Setup [v4]** (setup wizard page — see §23).
+**AWS Setup [v4]** (setup wizard page — see §23), **CopilotPage ("Niggex AI") [NEW]** (interactive
+telemetry-grounded AI copilot with real-time SSE streaming, evidence inspection, and session management).
 
 **Project Detail tabs:** Timeline, Agent Reasoning (shows provider badge — Local / Claude / GLM /
 NVIDIA), Disclosure Ledger, Shadow Verification, Logs (tabbed by service for MERN), Metrics,
@@ -1047,7 +1342,9 @@ button).
 
 **Components:** `Timeline`, `LogConsole`, `MetricsChart`, `ReasoningTrace`, `DisclosureLedger`,
 `ShadowVerificationPanel`, `AutonomyDial`, `ServiceList` **[NEW]**, `DeploymentReport` **[v4]**,
-`AWSSetupWizard` **[v4]**.
+`AWSSetupWizard` **[v4]**, **copilot/** (`ChatMessage` with thinking indicator, avatar, model badge &
+evidence accordion; `ChatInput` with multiline autosizing; `QuickActions` diagnostic shortcuts;
+`SessionSidebar` multi-session chat manager) **[NEW]**.
 
 ---
 

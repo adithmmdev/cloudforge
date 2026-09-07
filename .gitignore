@@ -8,3 +8,5 @@ node_modules/
 *.zip
 tmp_cache_client/
 tmp_cache_server/
+*.log
+logs.txt

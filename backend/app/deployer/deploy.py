@@ -13,6 +13,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+class DeploymentError(Exception):
+    def __init__(self, message, exit_code=1):
+        super().__init__(message)
+        self.exit_code = exit_code
+
 def _record_stage(db: Session, deployment: Deployment, stage: str, detail: str) -> None:
     db.add(StageEvent(deployment_id=deployment.id, stage=stage, detail=detail))
     db.commit()
@@ -117,17 +122,17 @@ def run_deployment_pipeline(db: Session, deployment_id: int):
                 save_cmd = ["docker", "save", "-o", tar_file, image_tag]
                 res = subprocess.run(save_cmd, capture_output=True)
                 if res.returncode != 0:
-                    raise RuntimeError(f"Docker save failed: {res.stderr.decode()}")
+                    raise DeploymentError(f"Docker save failed: {res.stderr.decode()}", res.returncode)
                 
                 scp_cmd = ["scp", "-O", "-o", "StrictHostKeyChecking=no", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "-i", key_path, tar_file, f"ubuntu@{instance.public_ip}:/tmp/image.tar"]
                 res = subprocess.run(scp_cmd, capture_output=True)
                 if res.returncode != 0:
-                    raise RuntimeError(f"SCP failed: {res.stderr.decode()}")
+                    raise DeploymentError(f"SCP failed: {res.stderr.decode()}", res.returncode)
                 
-                ssh_load_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "-i", key_path, f"ubuntu@{instance.public_ip}", f"docker load -i /tmp/image.tar"]
+                ssh_load_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "-i", key_path, f"ubuntu@{instance.public_ip}", f"docker load -i /tmp/image.tar && rm -f /tmp/image.tar"]
                 res = subprocess.run(ssh_load_cmd, capture_output=True)
                 if res.returncode != 0:
-                    raise RuntimeError(f"Docker load failed: {res.stderr.decode()}")
+                    raise DeploymentError(f"Docker load failed: {res.stderr.decode()}", res.returncode)
                 
         # Step 4: Launch Container
         logger.info(f"Deployment {deployment_id}: Launching container")
@@ -171,7 +176,7 @@ def run_deployment_pipeline(db: Session, deployment_id: int):
                 kwargs['cwd'] = cwd
             res = subprocess.run(run_cmd, capture_output=True, text=True, **kwargs)
             if res.returncode != 0:
-                raise RuntimeError(f"Failed to launch container locally: {res.stderr}")
+                raise DeploymentError(f"Failed to launch container locally: {res.stderr}", res.returncode)
                 
             # Wait and check if it crashed immediately
             time.sleep(15)
@@ -201,11 +206,14 @@ def run_deployment_pipeline(db: Session, deployment_id: int):
                 run_command = f"cd {proj_dir} && docker compose up -d"
 
             stdin, stdout, stderr = ssh.exec_command(run_command)
-            
-            if stdout.channel.recv_exit_status() != 0:
+            exit_status = stdout.channel.recv_exit_status()
+            if exit_status != 0:
                 err_msg = stderr.read().decode()
                 ssh.close()
-                raise RuntimeError(f"Failed to launch container: {err_msg}")
+                raise DeploymentError(f"Failed to launch container: {err_msg}", exit_status)
+                
+            # Clean up old unused images to prevent disk space exhaustion
+            ssh.exec_command("docker image prune -a -f")
             ssh.close()
         
         logger.info(f"Deployment {deployment_id} completed successfully")
@@ -223,4 +231,5 @@ def run_deployment_pipeline(db: Session, deployment_id: int):
         deployment.status = "failed"
         db.add(StageEvent(deployment_id=deployment.id, stage="failed", detail=full_err))
         db.commit()
-        raise RuntimeError(full_err) from e
+        exit_code = getattr(e, 'exit_code', 1)
+        raise DeploymentError(full_err, exit_code) from e

@@ -15,7 +15,7 @@ def analyze_instance_health(db: Session, instance_id: int):
     if not instance:
         return {"error": "Instance not found"}
         
-    deps = db.query(Deployment).filter(Deployment.instance_id == instance.id, Deployment.status.in_(['deployed', 'live'])).all()
+    deps = db.query(Deployment).filter(Deployment.instance_id == instance.id, Deployment.status.in_(['deployed', 'live', 'pending', 'building', 'deploying', 'health_check', 'healing'])).all()
     
     recent_metrics = []
     for dep in deps:
