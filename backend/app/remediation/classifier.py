@@ -38,13 +38,15 @@ def classify_error(logs_or_status: str) -> dict:
 
          
     import requests
+    # LLM Fallback Triage
+    log_text = f"{logs_or_status[:1000]}\n...\n{logs_or_status[-1000:]}" if len(logs_or_status) > 2000 else logs_or_status
     from app.remediation.local_llm import OLLAMA_HOST, OLLAMA_MODEL
     import json
     
+    prompt = f"""
 Analyze the following deployment error log and classify it.
 Output ONLY a JSON object with two keys:
 - error_class: A short snake_case string classifying the error. (If you cannot classify it, you MUST output exactly "unclassified" for error_class).
-- error_class: A short snake_case string classifying the error.
 - extracted_token: The specific missing file, module, env var, or package name if applicable (else empty string).
 
 Log:
@@ -59,8 +61,11 @@ Log:
         if res.status_code == 200:
             data = res.json().get("response", "{}")
             parsed = json.loads(data)
+            ec = parsed.get("error_class", "unclassified_by_llm")
+            if ec == "unknown_error":
+                ec = "unclassified"
             return {
-                "error_class": parsed.get("error_class", "unclassified_by_llm"),
+                "error_class": ec,
                 "extracted_token": parsed.get("extracted_token", "")
             }
     except Exception:

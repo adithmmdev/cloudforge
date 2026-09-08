@@ -113,6 +113,9 @@ def apply_add_dependency(repo_path: str, params: dict):
         
         with open(pkg_file, "w") as f:
             json.dump(data, f, indent=2)
+            
+        if os.path.exists(os.path.join(target_dir, "package-lock.json")):
+            os.remove(os.path.join(target_dir, "package-lock.json"))
 
 def apply_change_base_image(repo_path: str, params: dict):
     service = params.get("service", "")

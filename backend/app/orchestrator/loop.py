@@ -25,7 +25,7 @@ from app.doc_generator.generator import generate_deployment_report
 logger = logging.getLogger(__name__)
 
 LOCAL_CONFIDENCE_THRESHOLD = float(os.getenv("LOCAL_CONFIDENCE_THRESHOLD", 0.75))
-MAX_REMEDIATION_ATTEMPTS = 3
+MAX_REMEDIATION_ATTEMPTS = 4
 
 def run_orchestration_loop(db: Session, deployment_id: int):
     attempt_number = 1
@@ -137,19 +137,27 @@ def run_orchestration_loop(db: Session, deployment_id: int):
                 ]
                 
                 # 1. Try Local LLM
-                local_action = get_local_action(db, sig, past_actions_list)
-                
-                action_data = None
-                if local_action["confidence"] >= LOCAL_CONFIDENCE_THRESHOLD and validate_action(deployment_type, container_services, local_action["action_type"], local_action["params"]):
-                    action_data = local_action
-                    model_tier = "local"
-                    provider = "ollama"
+                if attempt_number <= 3:
+                    local_action = get_local_action(db, sig, past_actions_list)
+                    
+                    # 2. Threshold Check
+                    if local_action.get("confidence", 0.0) >= LOCAL_CONFIDENCE_THRESHOLD and local_action.get("action_type") != "NONE":
+                        action_data = local_action
+                        model_tier = "local"
+                        provider = "ollama"
+                    else:
+                        logger.info("Local LLM confidence below threshold or returned NONE. Escalating to Cloud Provider.")
+                        # 3. Escalate to Cloud
+                        cloud_action = get_cloud_remediation_action(db, failure.id, sig, past_actions_list)
+                        action_data = cloud_action
+                        model_tier = "cloud"
+                        provider = "nvidia_nim"
                 else:
-                    # 2. Escalate to Cloud LLM
+                    logger.info("3 attempts failed. Forcing Kimi fallback.")
                     cloud_action = get_cloud_remediation_action(db, failure.id, sig, past_actions_list)
                     action_data = cloud_action
                     model_tier = "cloud"
-                    provider = os.getenv("CLOUD_LLM_PROVIDER", "anthropic")
+                    provider = "nvidia_nim"
                     
                 is_valid = validate_action(deployment_type, container_services, action_data["action_type"], action_data.get("params", {}))
                 

@@ -1,53 +1,30 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, RefreshCw, ChevronRight, Loader2, Trash2, SortDesc } from 'lucide-react';
+import { AlertTriangle, ChevronRight, CircleDot, Plus, RefreshCw, SortDesc, Trash2 } from 'lucide-react';
+import MissionControlSidebar from '../components/mission-control/MissionControlSidebar.jsx';
+import MissionControlSpinner from '../components/mission-control/MissionControlSpinner.jsx';
+import '../components/mission-control/mission-control.css';
 
-const FRAMEWORK_COLORS = {
-  react:   { bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200'   },
-  express: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
-  flask:   { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200'  },
-  fastapi: { bg: 'bg-teal-50',   text: 'text-teal-700',   border: 'border-teal-200'   },
-  mern:    { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200'  },
-};
+const ACTIVE_STATUSES = new Set(['pending', 'building', 'healing', 'provisioning', 'detecting', 'deploying', 'health_check']);
+const HEALTHY_STATUSES = new Set(['live', 'deployed']);
+const ATTENTION_STATUSES = new Set(['failed', 'rolled_back']);
 
-const STATUS_CONFIG = {
-  live:        { dot: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', label: 'Live' },
-  building:    { dot: 'bg-amber-500',   text: 'text-amber-700',   bg: 'bg-amber-50',   border: 'border-amber-200',   label: 'Building' },
-  failed:      { dot: 'bg-red-500',     text: 'text-red-700',     bg: 'bg-red-50',     border: 'border-red-200',     label: 'Failed' },
-  pending:     { dot: 'bg-gray-400',    text: 'text-gray-600',    bg: 'bg-gray-50',    border: 'border-gray-200',    label: 'Pending' },
-  healing:     { dot: 'bg-purple-500',  text: 'text-purple-700',  bg: 'bg-purple-50',  border: 'border-purple-200',  label: 'Healing' },
-  rolled_back: { dot: 'bg-orange-500',  text: 'text-orange-700',  bg: 'bg-orange-50',  border: 'border-orange-200',  label: 'Rolled Back' },
-  deployed:    { dot: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', label: 'Deployed' },
-};
-
-function FrameworkBadge({ framework }) {
-  const c = FRAMEWORK_COLORS[framework] || FRAMEWORK_COLORS.react;
+function StatusPill({ status }) {
+  const value = status || 'pending';
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium font-mono border ${c.bg} ${c.text} ${c.border}`}>
-      {framework?.toUpperCase()}
+    <span className={`mc-status mc-status--${value}`}>
+      <span className="mc-status-dot" aria-hidden="true" />
+      {value.replace(/_/g, ' ')}
     </span>
   );
 }
 
-function StatusBadge({ status }) {
-  const c = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
+function EmptyOperations() {
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium border ${c.bg} ${c.text} ${c.border}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${c.dot} ${status === 'building' || status === 'healing' ? 'animate-pulse' : ''}`} />
-      {c.label}
-    </span>
-  );
-}
-
-function SkeletonRow() {
-  return (
-    <tr className="border-b border-gray-100">
-      {[...Array(7)].map((_, i) => (
-        <td key={i} className="px-4 py-4">
-          <div className="h-4 bg-gray-100 rounded animate-pulse" style={{ width: `${60 + Math.random() * 40}%` }} />
-        </td>
-      ))}
-    </tr>
+    <div className="mc-empty">
+      <strong>No active deployment operation</strong>
+      <p>CloudForge will surface live project state here as soon as an existing deployment enters the active pipeline.</p>
+    </div>
   );
 }
 
@@ -57,6 +34,8 @@ export default function Dashboard() {
   const [error, setError] = useState(null);
   const [sortOption, setSortOption] = useState('latest');
   const [deletingId, setDeletingId] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [streamConnected, setStreamConnected] = useState(false);
   const navigate = useNavigate();
   const wsRef = useRef(null);
 
@@ -82,6 +61,10 @@ export default function Dashboard() {
       const wsUrl = `${protocol}//${window.location.host}/api/ws/global`;
       const ws = new WebSocket(wsUrl);
 
+      ws.onopen = () => {
+        setStreamConnected(true);
+      };
+
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
@@ -92,6 +75,7 @@ export default function Dashboard() {
       };
 
       ws.onclose = () => {
+        setStreamConnected(false);
         setTimeout(connectWs, 3000);
       };
 
@@ -102,13 +86,14 @@ export default function Dashboard() {
 
     return () => {
       if (wsRef.current) wsRef.current.close();
+      setStreamConnected(false);
     };
   }, [fetchProjects]);
 
   const handleDelete = async (e, id, name) => {
     e.preventDefault();
     if (!confirm(`Are you sure you want to completely delete project "${name}"?\nThis will wipe all deployments, logs, and database records. This cannot be undone.`)) return;
-    
+
     setDeletingId(id);
     try {
       const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
@@ -117,10 +102,16 @@ export default function Dashboard() {
       } else {
         alert('Failed to delete project');
       }
-    } catch(err) {
+    } catch (err) {
       alert('Error deleting project');
     }
     setDeletingId(null);
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchProjects();
+    setRefreshing(false);
   };
 
   const sortedProjects = [...projects].sort((a, b) => {
@@ -130,129 +121,157 @@ export default function Dashboard() {
     return 0;
   });
 
+  const activeProjects = sortedProjects.filter(project => ACTIVE_STATUSES.has(project.status));
+  const healthyProjects = sortedProjects.filter(project => HEALTHY_STATUSES.has(project.status));
+  const attentionProjects = sortedProjects.filter(project => ATTENTION_STATUSES.has(project.status));
+  const deployedProjects = sortedProjects.filter(project => project.last_deployment_id);
+  const recentProjects = sortedProjects.filter(project => project.last_deployment_id).slice(0, 5);
+  const totalProjects = Math.max(projects.length, 1);
+
   return (
-    <div className="p-8 max-w-[1400px] mx-auto font-sans">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+    <div className="mc-page">
+      <header className="mc-page-header">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Mission Control</h1>
-          <p className="text-sm text-gray-500 mt-1">Real-time overview of your deployments and infrastructure.</p>
+          <p className="mc-eyebrow">CloudForge / Operations</p>
+          <h1 className="mc-page-title">Mission Control</h1>
+          <p className="mc-page-subtitle">A calm operating view of the projects and deployment state already synchronized by CloudForge.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <select 
-              value={sortOption} 
-              onChange={e => setSortOption(e.target.value)}
-              className="appearance-none bg-white border border-gray-200 text-gray-700 text-[13px] font-medium py-2 pl-3 pr-8 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-            >
-              <option value="latest">Sort by Latest Deploy</option>
-              <option value="oldest">Sort by Oldest Deploy</option>
-              <option value="az">Sort A-Z</option>
+        <div className="mc-page-actions">
+          <div className="mc-sort-wrap">
+            <select value={sortOption} onChange={e => setSortOption(e.target.value)} className="mc-sort" aria-label="Sort projects">
+              <option value="latest">Latest deployment</option>
+              <option value="oldest">Oldest deployment</option>
+              <option value="az">Project name</option>
             </select>
-            <SortDesc className="w-4 h-4 text-gray-400 absolute right-2.5 top-2.5 pointer-events-none" />
+            <SortDesc className="mc-sort-icon" size={15} aria-hidden="true" />
           </div>
-          
-          <button
-            onClick={() => navigate('/upload')}
-            className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium text-white bg-indigo-600 rounded-lg shadow hover:bg-indigo-700 hover:shadow-md transition-all active:scale-95"
-          >
-            <Plus className="w-4 h-4" />
-            Deploy New Project
+          <button type="button" className="mc-button mc-button-secondary" onClick={handleRefresh} disabled={refreshing}>
+            {refreshing ? <MissionControlSpinner compact label="Refreshing projects" /> : <RefreshCw size={14} aria-hidden="true" />}
+            Refresh
+          </button>
+          <button type="button" onClick={() => navigate('/upload')} className="mc-button mc-button-primary">
+            <Plus size={15} aria-hidden="true" />
+            Deploy project
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* Error */}
-      {error && (
-        <div className="mb-6 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 shadow-sm">
-          Failed to load projects: {error}
-        </div>
-      )}
+      <div className="mc-layout">
+        <MissionControlSidebar />
+        <main className="mc-content">
+          {error && (
+            <div className="mc-panel" role="alert">
+              <div className="mc-panel-body mc-empty">
+                <AlertTriangle size={18} color="#f00045" aria-hidden="true" />
+                <strong>Project state could not be refreshed</strong>
+                <p>Existing API request failed with: {error}</p>
+              </div>
+            </div>
+          )}
 
-      {/* Table */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-        <table className="w-full text-[13px]">
-          <thead>
-            <tr className="bg-gray-50/80 border-b border-gray-200">
-              <th className="px-5 py-3.5 text-left font-semibold text-gray-500 text-[11px] uppercase tracking-wider">ID</th>
-              <th className="px-5 py-3.5 text-left font-semibold text-gray-500 text-[11px] uppercase tracking-wider">Project Name</th>
-              <th className="px-5 py-3.5 text-left font-semibold text-gray-500 text-[11px] uppercase tracking-wider">Framework</th>
-              <th className="px-5 py-3.5 text-left font-semibold text-gray-500 text-[11px] uppercase tracking-wider">Type</th>
-              <th className="px-5 py-3.5 text-left font-semibold text-gray-500 text-[11px] uppercase tracking-wider">Status</th>
-              <th className="px-5 py-3.5 text-left font-semibold text-gray-500 text-[11px] uppercase tracking-wider">Last Deploy</th>
-              <th className="px-5 py-3.5 text-right font-semibold text-gray-500 text-[11px] uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
+          <section id="mc-overview" className="mc-overview" aria-labelledby="mc-overview-title">
+            <div className="mc-overview-top">
+              <div>
+                <p className="mc-panel-label">System state</p>
+                <h2 id="mc-overview-title" className="mc-section-title">Operational overview</h2>
+                <p className="mc-section-copy">Counts update from the existing project list and global synchronization stream.</p>
+              </div>
+              <span className="mc-live-indicator"><span className="mc-live-dot" aria-hidden="true" />{streamConnected ? 'Project stream connected' : 'Project stream reconnecting'}</span>
+            </div>
+
             {loading ? (
-              [...Array(4)].map((_, i) => <SkeletonRow key={i} />)
-            ) : sortedProjects.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-4 py-20 text-center">
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="w-14 h-14 bg-gray-50 border border-gray-100 rounded-2xl flex items-center justify-center shadow-sm">
-                      <svg className="w-7 h-7 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="text-[15px] font-semibold text-gray-900">No projects yet</p>
-                      <p className="text-[13px] text-gray-500 mt-1">Deploy your first project to get started</p>
-                    </div>
-                    <Link to="/upload" className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 shadow-sm transition-all mt-2">
-                      <Plus className="w-4 h-4" /> Deploy Project
-                    </Link>
-                  </div>
-                </td>
-              </tr>
+              <div className="mc-panel"><div className="mc-panel-body"><MissionControlSpinner label="Loading project state" /></div></div>
             ) : (
-              sortedProjects.map(project => (
-                <tr key={project.id} className="hover:bg-gray-50/80 transition-colors group">
-                  <td className="px-5 py-4 font-mono text-[12px] text-gray-400">#{project.id}</td>
-                  <td className="px-5 py-4">
-                    <span className="font-semibold text-gray-900">{project.name}</span>
-                  </td>
-                  <td className="px-5 py-4">
-                    <FrameworkBadge framework={project.framework} />
-                  </td>
-                  <td className="px-5 py-4">
-                    <span className="text-[12px] text-gray-500 font-mono">
-                      {project.framework === 'mern' ? 'compose' : 'single_container'}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4">
-                    {project.status ? (
-                      <StatusBadge status={project.status} />
-                    ) : (
-                      <span className="text-[12px] text-gray-400">No deployments</span>
-                    )}
-                  </td>
-                  <td className="px-5 py-4 font-mono text-[11px] text-gray-400">
-                    {project.last_deployment_id
-                      ? `#${project.last_deployment_id}`
-                      : '—'}
-                  </td>
-                  <td className="px-5 py-4 flex items-center justify-end gap-3 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={(e) => handleDelete(e, project.id, project.name)}
-                      disabled={deletingId === project.id}
-                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
-                      title="Delete Project"
-                    >
-                      {deletingId === project.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                    </button>
-                    <Link
-                      to={`/projects/${project.id}`}
-                      className="flex items-center gap-1 text-[12px] text-indigo-600 hover:text-indigo-800 font-medium px-2 py-1.5 hover:bg-indigo-50 rounded transition-colors"
-                    >
-                      View <ChevronRight className="w-3 h-3" />
-                    </Link>
-                  </td>
-                </tr>
-              ))
+              <div className="mc-stat-grid">
+                <div className="mc-stat"><p className="mc-stat-label">Projects</p><p className="mc-stat-value">{projects.length}<span className="mc-stat-unit">total</span></p><p className="mc-stat-copy">Registered CloudForge projects</p></div>
+                <div className="mc-stat"><p className="mc-stat-label">Active</p><p className="mc-stat-value">{activeProjects.length}<span className="mc-stat-unit">now</span></p><p className="mc-stat-copy">Current pipeline operations</p></div>
+                <div className="mc-stat"><p className="mc-stat-label">Healthy</p><p className="mc-stat-value">{healthyProjects.length}<span className="mc-stat-unit">live</span></p><p className="mc-stat-copy">Live or deployed projects</p></div>
+                <div className="mc-stat"><p className="mc-stat-label">Attention</p><p className="mc-stat-value">{attentionProjects.length}<span className="mc-stat-unit">open</span></p><p className="mc-stat-copy">Failed or rolled-back state</p></div>
+              </div>
             )}
-          </tbody>
-        </table>
+          </section>
+
+          <section id="mc-active" aria-labelledby="mc-active-title">
+            <div className="mc-section-heading">
+              <div><p className="mc-panel-label">Active operations</p><h2 id="mc-active-title" className="mc-section-title">Deployment queue</h2></div>
+              <CircleDot size={18} color="#f00045" aria-hidden="true" />
+            </div>
+            <div className="mc-operation-grid" style={{ marginTop: 16 }}>
+              <article className="mc-panel">
+                <div className="mc-panel-head"><div><p className="mc-panel-label">Current work</p><h3 className="mc-panel-title">Projects in motion</h3></div><span className="mc-deployment-ref">{activeProjects.length} active</span></div>
+                <div className="mc-panel-body">
+                  {loading ? <MissionControlSpinner label="Loading active operations" /> : activeProjects.length === 0 ? <EmptyOperations /> : (
+                    <div className="mc-queue">
+                      {activeProjects.map(project => (
+                        <div className="mc-queue-row" key={project.id}>
+                          <div><Link className="mc-project-link mc-project-name" to={`/projects/${project.id}`}>{project.name}</Link><p className="mc-project-meta">{project.framework || 'unknown'} / {project.framework === 'mern' ? 'compose' : 'single container'}</p></div>
+                          <StatusPill status={project.status} />
+                          <span className="mc-deployment-ref">{project.last_deployment_id ? `DEP-${project.last_deployment_id}` : 'No deployment ref'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </article>
+              <article className="mc-panel">
+                <div className="mc-panel-head"><div><p className="mc-panel-label">Release posture</p><h3 className="mc-panel-title">Observed status</h3></div></div>
+                <div className="mc-panel-body mc-distribution">
+                  <div className="mc-distribution-row"><span>Healthy</span><div className="mc-distribution-track"><div className="mc-distribution-fill" style={{ width: `${(healthyProjects.length / totalProjects) * 100}%` }} /></div><strong>{healthyProjects.length}</strong></div>
+                  <div className="mc-distribution-row"><span>Active</span><div className="mc-distribution-track"><div className="mc-distribution-fill mc-distribution-fill--active" style={{ width: `${(activeProjects.length / totalProjects) * 100}%` }} /></div><strong>{activeProjects.length}</strong></div>
+                  <div className="mc-distribution-row"><span>Attention</span><div className="mc-distribution-track"><div className="mc-distribution-fill mc-distribution-fill--attention" style={{ width: `${(attentionProjects.length / totalProjects) * 100}%` }} /></div><strong>{attentionProjects.length}</strong></div>
+                  <p className="mc-note">Status bars use only the project states returned by the existing API. No inferred health or deployment telemetry is introduced here.</p>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section id="mc-autonomy" aria-labelledby="mc-autonomy-title">
+            <div className="mc-section-heading"><div><p className="mc-panel-label">Agent activity</p><h2 id="mc-autonomy-title" className="mc-section-title">Autonomy remains project-scoped</h2><p className="mc-section-copy">Mission Control preserves its existing project-level data flow. Detailed reasoning and autonomy controls remain available on each project’s existing detail page.</p></div></div>
+          </section>
+
+          <section id="mc-observability" aria-labelledby="mc-observability-title">
+            <div className="mc-section-heading"><div><p className="mc-panel-label">Observability</p><h2 id="mc-observability-title" className="mc-section-title">Recent deployment state</h2><p className="mc-section-copy">The most recent deployment reference and state for each project are presented without inventing timestamps or event details.</p></div></div>
+            <div className="mc-observability-grid" style={{ marginTop: 16 }}>
+              <article className="mc-panel"><div className="mc-panel-head"><div><p className="mc-panel-label">Deployment coverage</p><h3 className="mc-panel-title">Projects with a deployment reference</h3></div><span className="mc-deployment-ref">{deployedProjects.length}/{projects.length}</span></div><div className="mc-panel-body"><div className="mc-distribution-track" style={{ height: 8 }}><div className="mc-distribution-fill" style={{ width: `${(deployedProjects.length / totalProjects) * 100}%` }} /></div><p className="mc-note">A reference appears only when the current project list includes its last deployment identifier.</p></div></article>
+              <article className="mc-panel"><div className="mc-panel-head"><div><p className="mc-panel-label">Refresh state</p><h3 className="mc-panel-title">Synchronized project inventory</h3></div></div><div className="mc-panel-body"><div className="mc-empty"><strong>{loading ? 'Loading current inventory' : 'Inventory available'}</strong><p>The existing global WebSocket remains the source for in-session project updates; refresh uses the existing projects request.</p></div></div></article>
+            </div>
+          </section>
+
+          <section id="mc-projects" aria-labelledby="mc-projects-title">
+            <div className="mc-section-heading"><div><p className="mc-panel-label">Project / deployment state</p><h2 id="mc-projects-title" className="mc-section-title">Project inventory</h2><p className="mc-section-copy">Manage projects using the same actions and routes as before.</p></div></div>
+            <div className="mc-panel mc-projects-panel" style={{ marginTop: 16 }}>
+              {loading ? (
+                <div className="mc-panel-body"><MissionControlSpinner label="Loading project inventory" /></div>
+              ) : sortedProjects.length === 0 ? (
+                <div className="mc-panel-body mc-empty"><strong>No projects yet</strong><p>Deploy a project to populate Mission Control with real deployment state.</p><Link to="/upload" className="mc-button mc-button-primary"><Plus size={14} aria-hidden="true" /> Deploy project</Link></div>
+              ) : (
+                <div className="mc-table-wrap">
+                  <table className="mc-table">
+                    <thead><tr><th>ID</th><th>Project</th><th>Framework</th><th>Deployment type</th><th>Status</th><th>Last deployment</th><th>Actions</th></tr></thead>
+                    <tbody>{sortedProjects.map(project => (
+                      <tr key={project.id}>
+                        <td className="mc-table-id">#{project.id}</td>
+                        <td><Link className="mc-project-link mc-table-name" to={`/projects/${project.id}`}>{project.name}</Link></td>
+                        <td><span className="mc-framework">{project.framework?.toUpperCase() || 'UNKNOWN'}</span></td>
+                        <td className="mc-table-type">{project.framework === 'mern' ? 'compose' : 'single_container'}</td>
+                        <td>{project.status ? <StatusPill status={project.status} /> : <span className="mc-deployment-ref">No deployments</span>}</td>
+                        <td className="mc-table-id">{project.last_deployment_id ? `DEP-${project.last_deployment_id}` : '—'}</td>
+                        <td><div className="mc-table-actions"><button type="button" onClick={(event) => handleDelete(event, project.id, project.name)} disabled={deletingId === project.id} className="mc-icon-button" aria-label={`Delete ${project.name}`} title="Delete project">{deletingId === project.id ? <MissionControlSpinner compact label={`Deleting ${project.name}`} /> : <Trash2 size={15} aria-hidden="true" />}</button><Link to={`/projects/${project.id}`} className="mc-view-link">View <ChevronRight size={14} aria-hidden="true" /></Link></div></td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {!loading && recentProjects.length > 0 && (
+            <section className="mc-recent" aria-labelledby="mc-recent-title">
+              <div className="mc-recent-head"><div><p className="mc-panel-label">Recent activity</p><h2 id="mc-recent-title" className="mc-section-title">Latest deployment references</h2></div></div>
+              <div className="mc-recent-list">{recentProjects.map(project => <Link className="mc-recent-item mc-project-link" to={`/projects/${project.id}`} key={project.id}><span className={`mc-recent-marker mc-recent-marker--${project.status || 'pending'}`} aria-hidden="true" /><span><span className="mc-recent-title">{project.name}</span><span className="mc-recent-meta">{project.status ? project.status.replace(/_/g, ' ') : 'no deployment state'}</span></span><span className="mc-recent-id">DEP-{project.last_deployment_id}</span></Link>)}</div>
+            </section>
+          )}
+        </main>
       </div>
     </div>
   );

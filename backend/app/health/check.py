@@ -15,7 +15,9 @@ def check_deployment_health(db: Session, deployment_id: int) -> dict:
     if not instance or not instance.public_ip:
         return {"passed": False, "method": "none", "ms": 0, "error": "instance_ip_not_found"}
         
-    target_container = next((c for c in deployment.containers if c.service_name in ('client', 'app') and c.host_port), None)
+    target_container = next((c for c in deployment.containers if ("client" in c.service_name or "app" in c.service_name or c.service_name == deployment.project.name) and c.host_port), None)
+    if not target_container:
+        target_container = next((c for c in deployment.containers if c.host_port), None)
     if not target_container:
         return {"passed": False, "method": "none", "ms": 0, "error": "no_target_container"}
         

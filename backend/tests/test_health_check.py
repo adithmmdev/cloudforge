@@ -43,7 +43,7 @@ def test_tier_1_health_pass(mock_sleep, mock_get, mock_db):
     
     result = check_deployment_health(mock_db, 10)
     
-    assert result is True
+    assert result["passed"] is True
     assert mock_get.call_count == 1
     args = mock_get.call_args[0]
     assert "/health" in args[0]
@@ -65,7 +65,7 @@ def test_tier_2_health_pass(mock_sleep, mock_get, mock_db):
     
     result = check_deployment_health(mock_db, 10)
     
-    assert result is True
+    assert result["passed"] is True
     assert mock_get.call_count == 6  # 5 fails for /health + 1 pass for /
 
 @patch("app.health.check.requests.get")
@@ -85,7 +85,7 @@ def test_tier_3_health_pass(mock_sleep, mock_conn, mock_get, mock_db):
     
     result = check_deployment_health(mock_db, 10)
     
-    assert result is True
+    assert result["passed"] is True
     assert mock_get.call_count == 10  # 5 fails for /health + 5 fails for /
     assert mock_conn.call_count == 1
 
@@ -100,6 +100,6 @@ def test_all_tiers_fail(mock_sleep, mock_conn, mock_get, mock_db):
     
     result = check_deployment_health(mock_db, 10)
     
-    assert result is False
+    assert result["passed"] is False
     assert mock_get.call_count == 10
     assert mock_conn.call_count == 5
