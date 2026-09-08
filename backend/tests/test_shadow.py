@@ -29,13 +29,13 @@ def test_shadow_verification_single_container_success(mock_get, mock_sleep, mock
     success = run_shadow_verification(mock_db, 10, "/tmp/project", "single_container", "fastapi")
     
     assert success is True
-    assert mock_db.add.call_count == 2 # stay_running_15s and smoke_test
+    assert mock_db.add.call_count == 4 # build, run, stay_running_15s, smoke_test
     
     calls = mock_db.add.call_args_list
-    assert calls[0][0][0].test_name == "stay_running_15s"
-    assert calls[0][0][0].passed is True
-    assert calls[1][0][0].test_name == "smoke_test"
-    assert calls[1][0][0].passed is True
+    assert calls[2][0][0].test_name == "stay_running_15s"
+    assert calls[2][0][0].passed is True
+    assert calls[3][0][0].test_name == "smoke_test"
+    assert calls[3][0][0].passed is True
     assert any(call.args[:3] == (["docker", "rm", "-f", "shadow_cnt_10"],) for call in mock_run.call_args_list)
 
 @patch("app.remediation.shadow.subprocess.run")
@@ -60,7 +60,7 @@ def test_shadow_verification_mern_success(mock_get, mock_sleep, mock_run, mock_d
     success = run_shadow_verification(mock_db, 11, "/tmp/project", "mern", "mern")
     
     assert success is True
-    assert mock_db.add.call_count == 2
+    assert mock_db.add.call_count == 5
     
 @patch("app.remediation.shadow.subprocess.run")
 @patch("app.remediation.shadow.time.sleep")
