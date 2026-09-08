@@ -12,7 +12,7 @@ def mock_db():
 
 def setup_mock_db(mock_db, mern=False, has_prev=True):
     project = Project(id=1)
-    failed_deployment = Deployment(id=10, project_id=1, instance_id=1, deployment_type='mern' if mern else 'single_container')
+    failed_deployment = Deployment(id=10, project_id=1, instance_id=1, deployment_type='mern' if mern else 'single_container', status='failed')
     
     prev_deployment = None
     if has_prev:
@@ -88,12 +88,12 @@ def test_rollback_single_container(mock_exists, mock_ssh_class, mock_db):
     
     assert res is True
     assert failed_deployment.status == 'rolled_back'
-    assert mock_ssh.exec_command.call_count == 2
+    assert mock_ssh.exec_command.call_count == 3
     
     args1 = mock_ssh.exec_command.call_args_list[0][0][0]
     assert "docker stop proj_1_10" in args1
     
-    args2 = mock_ssh.exec_command.call_args_list[1][0][0]
+    args2 = mock_ssh.exec_command.call_args_list[2][0][0]
     assert "docker run -d -p 80:8000" in args2
     assert "proj_1_9_rollback" in args2
     assert "app:old" in args2
@@ -113,11 +113,9 @@ def test_rollback_mern(mock_exists, mock_ssh_class, mock_db):
     
     assert res is True
     assert failed_deployment.status == 'rolled_back'
-    assert mock_ssh.exec_command.call_count == 3
+    assert mock_ssh.exec_command.call_count == 2
     
     # 1. docker compose down
     assert "down" in mock_ssh.exec_command.call_args_list[0][0][0]
-    # 2. write compose file
-    assert "base64" in mock_ssh.exec_command.call_args_list[1][0][0]
-    # 3. docker compose up
-    assert "up -d" in mock_ssh.exec_command.call_args_list[2][0][0]
+    # 2. docker compose up
+    assert "up -d" in mock_ssh.exec_command.call_args_list[1][0][0]

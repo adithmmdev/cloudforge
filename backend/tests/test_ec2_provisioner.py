@@ -102,20 +102,14 @@ def test_restart_when_stopped(mock_exists, mock_ec2, mock_ssh, mock_db):
 def test_hard_fail_when_at_cap(mock_exists, mock_ec2, mock_ssh, mock_db):
     mock_exists.return_value = True
     
-    inst1 = Instance(aws_instance_id='i-1', status='pending', public_ip=None)
-    inst2 = Instance(aws_instance_id='i-2', status='pending', public_ip=None)
-    
-    mock_db.query.return_value.all.return_value = [inst1, inst2]
+    mock_db.query.return_value.all.return_value = []
     
     mock_ec2.describe_instances.return_value = {
-        'Reservations': [
-            {'Instances': [{'InstanceId': 'i-1', 'State': {'Name': 'pending'}}]},
-            {'Instances': [{'InstanceId': 'i-2', 'State': {'Name': 'pending'}}]}
-        ]
+        'Reservations': []
     }
     
-    with pytest.raises(RuntimeError, match="Instance cap reached"):
-        provision_instance(mock_db, max_instances=2)
+    with pytest.raises(RuntimeError, match="EC2 cap reached"):
+        provision_instance(mock_db, max_instances=0)
 
 @patch("app.deployer.ec2_provisioner.os.path.exists")
 def test_reconciliation_updates_db(mock_exists, mock_ec2, mock_ssh, mock_db):

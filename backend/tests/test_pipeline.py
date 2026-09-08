@@ -13,11 +13,16 @@ def mock_db():
 @patch("app.deployer.deploy.provision_instance")
 @patch("app.deployer.deploy.build_project")
 @patch("app.deployer.deploy.subprocess.Popen")
+@patch("app.deployer.deploy.subprocess.run")
 @patch("app.deployer.deploy.paramiko.SSHClient")
 @patch("app.deployer.deploy.os.path.exists")
 @patch("app.detector.registry.registry.detect")
-def test_successful_deployment(mock_detect, mock_exists, mock_ssh_class, mock_popen, mock_build, mock_provision, mock_db):
+def test_successful_deployment(mock_detect, mock_exists, mock_ssh_class, mock_run, mock_popen, mock_build, mock_provision, mock_db):
     mock_exists.return_value = True
+    
+    mock_run_res = MagicMock()
+    mock_run_res.returncode = 0
+    mock_run.return_value = mock_run_res
     
     mock_adapter = MagicMock()
     mock_adapter.name = "single_container"
@@ -39,7 +44,11 @@ def test_successful_deployment(mock_detect, mock_exists, mock_ssh_class, mock_po
     mock_db.query.side_effect = query_side_effect
     
     mock_instance = Instance(id=5, public_ip="8.8.8.8")
-    mock_provision.return_value = mock_instance
+    def mock_provision_side_effect(db, max_instances=None, deployment_id=None):
+        if deployment_id:
+            mock_deployment.instance_id = 5
+        return mock_instance
+    mock_provision.side_effect = mock_provision_side_effect
     
     mock_build.return_value = {
         "status": "success",
@@ -65,7 +74,8 @@ def test_successful_deployment(mock_detect, mock_exists, mock_ssh_class, mock_po
     assert mock_deployment.instance_id == 5
     assert mock_provision.called
     assert mock_build.called
-    assert mock_popen.call_count == 2
+    assert mock_run.call_count >= 3  # docker save, scp, ssh load
+    assert mock_ssh.exec_command.call_count == 2  # docker run, docker image prune
     assert mock_ssh.exec_command.called
 
 @patch("app.deployer.deploy.provision_instance")
@@ -104,7 +114,8 @@ def test_build_failure(mock_detect, mock_exists, mock_ssh_class, mock_popen, moc
         "error": "syntax error"
     }
     
-    with pytest.raises(RuntimeError, match="Build failed: syntax error"):
+    from app.deployer.deploy import DeploymentError
+    with pytest.raises(DeploymentError, match="Build failed: syntax error"):
         run_deployment_pipeline(mock_db, deployment_id=2)
         
     assert mock_deployment.status == "failed"

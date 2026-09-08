@@ -35,9 +35,14 @@ def test_mern_templates():
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
     client = env.get_template("mern_client.Dockerfile.j2").render(build_output_dir="dist")
     server = env.get_template("mern_server.Dockerfile.j2").render(entry_file="server.js")
-    nginx = env.get_template("mern_nginx.conf.j2").render()
-    compose = env.get_template("mern_compose.yml.j2").render(project_id="test1", deployment_id="v1", host_port="8080")
-    
+    nginx = env.get_template("mern_nginx.conf.j2").render(backend_internal_port="5000")
+    server_context = {
+        "backend_internal_port": "5000",
+        "mongo_config": {"env_var": "MONGO_URL", "db_name": "test"},
+        "mem_limit": "256M"
+    }
+    client_context = {"mem_limit": "256M"}
+    compose = env.get_template("mern_compose.yml.j2").render(project_id="test1", deployment_id="v1", host_port="8080", server=server_context, client=client_context)
     assert "nginx" in client
     assert "node" in server
     assert "proxy_pass http://server:5000;" in nginx

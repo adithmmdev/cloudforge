@@ -52,6 +52,11 @@ def test_generate_deployment_report(mock_db):
             q.filter.return_value.all.return_value = []
         elif model.__name__ == "DeploymentReport":
             q.filter.return_value.first.return_value = None
+        else:
+            q.filter.return_value.first.return_value = None
+            q.filter.return_value.all.return_value = []
+            q.filter.return_value.order_by.return_value.all.return_value = []
+        return q
         return q
         
     mock_db.query.side_effect = query_side_effect

@@ -167,7 +167,7 @@ def run_deployment_pipeline(db: Session, deployment_id: int):
                     run_cmd.extend(["--restart", "always"])
                 run_cmd.extend([f"--memory={mem_limit}", "--cpus=0.5", "--pids-limit=100", "--name", f"proj_{project.id}_{deployment_id}", main_image])
             else:
-                ssh.exec_command(f"docker rm -f proj_{project.id}_{deployment_id}")
+                subprocess.run(["ssh", "-o", "StrictHostKeyChecking=no", "-i", key_path, f"ubuntu@{instance.public_ip}", f"docker rm -f proj_{project.id}_{deployment_id}"], capture_output=True)
                 run_command = f"docker run -d -p {assigned_port}:{extracted_info.get('backend_internal_port', 8000)} {restart_policy} --memory={mem_limit} --cpus=0.5 --pids-limit=100 --name proj_{project.id}_{deployment_id} {main_image}"
             
         if is_local:

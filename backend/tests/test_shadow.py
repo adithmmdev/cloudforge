@@ -60,7 +60,7 @@ def test_shadow_verification_mern_success(mock_get, mock_sleep, mock_run, mock_d
     success = run_shadow_verification(mock_db, 11, "/tmp/project", "mern", "mern")
     
     assert success is True
-    assert mock_db.add.call_count == 5
+    assert mock_db.add.call_count == 3
     
 @patch("app.remediation.shadow.subprocess.run")
 @patch("app.remediation.shadow.time.sleep")

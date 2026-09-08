@@ -27,7 +27,8 @@ def test_get_remediation_action_success(mock_post):
     }
     mock_post.return_value = mock_res
     
-    action = get_remediation_action({"error_class": "missing_python_dependency"})
+    mock_db = MagicMock()
+    action = get_remediation_action(mock_db, {"error_class": "missing_python_dependency"})
     
     assert action["action_type"] == "ADD_DEPENDENCY"
     assert action["confidence"] == 0.9
@@ -37,7 +38,8 @@ def test_get_remediation_action_success(mock_post):
 def test_get_remediation_action_failure(mock_post):
     mock_post.side_effect = Exception("Ollama is down")
     
-    action = get_remediation_action({"error_class": "missing_python_dependency"})
+    mock_db = MagicMock()
+    action = get_remediation_action(mock_db, {"error_class": "missing_python_dependency"})
     
     assert action["action_type"] == "NONE"
     assert action["confidence"] == 0.0

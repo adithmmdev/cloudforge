@@ -72,9 +72,11 @@ def stop_instance(id: str, db: Session = Depends(get_db)):
         res = ec2.describe_instances(InstanceIds=[id])
         tags = res['Reservations'][0]['Instances'][0].get('Tags', [])
         if not any(t['Key'] == 'cloudforge-managed' and t['Value'] == 'true' for t in tags):
-            logger.warning("Not CloudForge managed")
+            raise ValueError("Not CloudForge managed")
             
         ec2.stop_instances(InstanceIds=[id])
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Cannot stop non-CloudForge managed instances")
     except Exception as e:
         logger.warning(f"AWS stop_instance failed, proceeding with DB update: {e}")
         

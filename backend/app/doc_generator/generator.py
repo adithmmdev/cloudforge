@@ -117,7 +117,14 @@ def generate_deployment_report(db: Session, deployment_id: int):
             "shadow_pass": "Yes" if shadow_pass else "No"
         })
         
+    import json
     env_keys = []
+    if deployment.env_vars:
+        try:
+            env_dict = json.loads(deployment.env_vars)
+            env_keys = list(env_dict.keys())
+        except:
+            pass
     main_port = None
     for c in containers:
         if c.host_port:

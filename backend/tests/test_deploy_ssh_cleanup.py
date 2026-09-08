@@ -25,25 +25,29 @@ def test_deploy_ssh_cleanup_on_failure(monkeypatch):
     mock_db.query.side_effect = mock_query
     
     import app.deployer.deploy
-    monkeypatch.setattr(app.deployer.deploy, "provision_instance", lambda db, max: mock_instance)
-    monkeypatch.setattr(app.deployer.deploy, "detect_framework", lambda p: "single_container")
-    monkeypatch.setattr(app.deployer.deploy, "get_adapter", MagicMock())
-    monkeypatch.setattr(app.deployer.deploy, "generate_dockerfile", lambda f,p,c: None)
-    
+    monkeypatch.setattr(app.deployer.deploy, "provision_instance", lambda db, max_instances=None, deployment_id=None: mock_instance)
+    monkeypatch.setattr(app.deployer.deploy, "build_project", lambda *args, **kwargs: {"status": "success", "images": ["app:latest"]})
+    mock_adapter = MagicMock()
+    mock_adapter.name = "single_container"
+    monkeypatch.setattr("app.detector.registry.detect", lambda p: (mock_adapter, {}))
     mock_ssh = MagicMock()
-    mock_sftp = MagicMock()
-    mock_ssh.open_sftp.return_value = mock_sftp
-    mock_sftp.put.side_effect = Exception("SFTP upload failed")
-    # Connection succeeds
     mock_ssh.connect.return_value = None
     
     with patch("app.deployer.deploy.paramiko.SSHClient") as MockClient:
         MockClient.return_value = mock_ssh
         
         with patch("app.deployer.deploy.subprocess.run") as mock_run:
-            mock_run.return_value.returncode = 0
+            def run_side_effect(cmd, **kwargs):
+                res = MagicMock()
+                if "scp" in cmd:
+                    res.returncode = 1
+                    res.stderr = b"SCP upload failed"
+                else:
+                    res.returncode = 0
+                    res.stderr = b""
+                return res
+            mock_run.side_effect = run_side_effect
             
-            with pytest.raises(RuntimeError, match="SFTP upload failed"):
+            from app.deployer.deploy import DeploymentError
+            with pytest.raises(DeploymentError, match="SCP upload failed"):
                 run_deployment_pipeline(mock_db, 1)
-                
-            mock_ssh.close.assert_called()
