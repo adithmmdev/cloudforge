@@ -278,7 +278,7 @@ export default function ProjectDetail() {
     });
   };
 
-  const status = deployment?.status || 'pending';
+  const status = deployment?.status || 'none';
   const statusStyle = STATUS_STYLES[status] || STATUS_STYLES.pending;
   const isCompose = project?.framework === 'mern';
   const isActive = ['pending', 'building', 'deploying', 'health_check', 'healing'].includes(status);
