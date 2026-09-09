@@ -150,9 +150,15 @@ export default function ProjectDetail() {
             break;
           case 'remediation_promoted':
             setRemediationAction(prev => prev ? { ...prev, status: 'promoted' } : prev);
+            setShadowState('passed');
+            break;
+          case 'remediation_shadow_testing':
+            setRemediationAction(prev => prev ? { ...prev, status: 'shadow_testing' } : prev);
+            setShadowState('building');
             break;
           case 'remediation_rejected':
             setRemediationAction(prev => prev ? { ...prev, status: 'rejected' } : prev);
+            setShadowState('failed');
             break;
           case 'deployment_complete':
             setDeployment(prev => prev ? { ...prev, status: 'live', app_url: payload.app_url } : prev);
@@ -160,6 +166,7 @@ export default function ProjectDetail() {
             break;
           case 'deployment_failed':
             setDeployment(prev => prev ? { ...prev, status: payload.rolled_back ? 'rolled_back' : 'failed' } : prev);
+            setShadowState(prev => prev === 'building' || prev === 'testing' ? 'failed' : prev);
             break;
           case 'deployment_resumed':
             if (payload.deployment_id === depId) {
@@ -193,7 +200,10 @@ export default function ProjectDetail() {
           fetch(`/api/deployments/${depId}/remediation-actions`, { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
         ]);
         // Only hydrate if no live data yet
-        if (diagData.length > 0) setDiagnosis(prev => prev || diagData[diagData.length - 1]);
+        if (diagData.length > 0) {
+          setDiagnoses(prev => prev.length === 0 ? diagData : prev);
+          setDiagnosis(diagData[diagData.length - 1]);
+        }
         if (discData.length > 0) setDisclosures(prev => prev.length === 0 ? discData : prev);
         if (shadowData.length > 0) {
           setShadowTests(prev => prev.length === 0 ? shadowData : prev);
@@ -238,6 +248,7 @@ export default function ProjectDetail() {
     setStageEvents([]);
     setLogs([]);
     setLiveMetrics([]);
+    setDiagnoses([]);
     setDiagnosis(null);
     setShadowTests([]);
     setShadowState('idle');
@@ -256,6 +267,7 @@ export default function ProjectDetail() {
   const handleResume = async () => {
     if (!deployment?.id) return;
     setDeploying(true);
+    setDiagnoses([]);
     setDiagnosis(null);
     setRemediationAction(null);
     setShadowState('idle');
@@ -381,9 +393,10 @@ export default function ProjectDetail() {
 
       {/* Tab Content */}
       <div className="flex-1 overflow-auto">
-        {activeTab === 'timeline'   && <TimelineTab events={stageEvents} currentStage={stageEvents.length > 0 ? stageEvents[stageEvents.length - 1].stage : status} deployment={deployment} />}
+        {activeTab === 'timeline'   && <TimelineTab events={stageEvents} currentStage={['failed', 'rolled_back', 'cancelled', 'live'].includes(deployment?.status) ? deployment.status : (stageEvents.length > 0 ? stageEvents[stageEvents.length - 1].stage : status)} deployment={deployment} />}
         {activeTab === 'reasoning'  && (
           <AgentReasoningTab
+            diagnoses={diagnoses}
             diagnosis={diagnosis}
             remediationAction={remediationAction}
             autonomyMode={autonomyMode}

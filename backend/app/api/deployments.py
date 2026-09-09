@@ -255,7 +255,7 @@ def manual_shadow_verification(id: int, background_tasks: BackgroundTasks, db: S
         deployment_id=dep.id,
         action_type="MANUAL",
         params={},
-        status="pending"
+        status="shadow_testing"
     )
     db.add(rem)
     db.commit()

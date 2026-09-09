@@ -5,28 +5,38 @@ def build_context(db, project_id, deployment_id, category, message, conversation
     ctx = {}
     tools_used = []
     
+    from app.models.project import Project
+    proj = db.query(Project).filter(Project.id == project_id).first()
+    if proj:
+        ctx['project'] = {
+            'id': proj.id,
+            'name': proj.name,
+            'framework': proj.framework,
+        }
+        tools_used.append('get_project')
+        
     ctx['current_deployment'] = tools.get_current_deployment(db, project_id)
     tools_used.append('get_current_deployment')
     
     if deployment_id:
         ctx['deployment_status'] = tools.get_deployment_status(db, deployment_id)
         tools_used.append('get_deployment_status')
+        ctx['timeline'] = tools.get_deployment_timeline(db, deployment_id)
+        ctx['recent_events'] = tools.get_recent_events(db, deployment_id, n=10)
+        
+        ctx['errors'] = tools.get_recent_errors(db, deployment_id)
+        ctx['remediation'] = tools.get_remediation_history(db, deployment_id)
+        ctx['shadow'] = tools.get_shadow_results(db, deployment_id)
+        ctx['qwen_agent'] = tools.get_qwen_result(db, deployment_id)
+        ctx['kimi_agent'] = tools.get_kimi_result(db, deployment_id)
+        tools_used.extend(['get_deployment_timeline', 'get_recent_events', 'get_recent_errors', 'get_remediation_history', 'get_shadow_results', 'get_qwen_result', 'get_kimi_result'])
         
     ctx['ec2_status'] = tools.get_ec2_status(db, project_id)
     tools_used.append('get_ec2_status')
     
-    if category in ['CURRENT_STATUS', 'DEPLOYMENT_TIMING']:
-        ctx['timeline'] = tools.get_deployment_timeline(db, deployment_id)
-        ctx['stage_timings'] = tools.get_stage_timings(db, deployment_id)
-        ctx['recent_events'] = tools.get_recent_events(db, deployment_id)
-        tools_used.extend(['get_deployment_timeline', 'get_stage_timings', 'get_recent_events'])
-        
-    elif category in ['FAILURE_EXPLANATION', 'LOG_ANALYSIS', 'SHADOW', 'REMEDIATION']:
-        ctx['errors'] = tools.get_recent_errors(db, deployment_id)
+    if category in ['LOG_ANALYSIS']:
         ctx['logs'] = tools.get_build_logs(db, deployment_id)
-        ctx['remediation'] = tools.get_remediation_history(db, deployment_id)
-        ctx['shadow'] = tools.get_shadow_results(db, deployment_id)
-        tools_used.extend(['get_recent_errors', 'get_build_logs', 'get_remediation_history', 'get_shadow_results'])
+        tools_used.append('get_build_logs')
         
     elif category == 'PROJECT_CODE':
         ctx['files'] = tools.list_project_files(db, project_id)

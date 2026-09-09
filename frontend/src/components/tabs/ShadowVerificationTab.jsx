@@ -96,11 +96,15 @@ export default function ShadowVerificationTab({ deploymentId, shadowTests, shado
       await fetch(`/api/deployments/${deploymentId}/shadow-manual`, { method: 'POST' });
     } catch (err) {
       console.error(err);
+      setRunningManual(false);
     }
-    // We don't setRunningManual(false) immediately because the websocket will update the state
-    // but just in case, we can set it back after a timeout or let parent update props.
-    // The main bug was setShadowState() crashing the app.
   };
+
+  useEffect(() => {
+    if (shadowState === 'passed' || shadowState === 'failed') {
+      setRunningManual(false);
+    }
+  }, [shadowState]);
 
   // Live shadow tests merged with historical
   const liveMerged = [

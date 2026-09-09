@@ -64,7 +64,7 @@ def test_generate_deployment_report(mock_db):
     report = generate_deployment_report(mock_db, 1)
     
     assert report is not None
-    assert "Deployment Report — test-project" in report.report_markdown
+    assert "CLOUDFORGE DEPLOYMENT REPORT" in report.report_markdown
     assert "1.2.3.4" in report.report_markdown
-    assert "PORT" in report.report_markdown
+    # We no longer print raw env keys in the new template format
     assert mock_db.add.called

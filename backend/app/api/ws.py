@@ -123,7 +123,7 @@ def fetch_deployment_data(deployment_id, last_event_id, last_diagnosis_id, last_
                     events.append({"event": "remediation_promoted", "remediation_action_id": action.id})
                 elif action.status == 'shadow_testing':
                     events.append({"event": "remediation_shadow_testing", "remediation_action_id": action.id})
-                elif action.status in ('discarded', 'rejected'):
+                elif action.status in ('discarded', 'rejected', 'failed'):
                     events.append({"event": "remediation_rejected", "remediation_action_id": action.id})
 
         # 6. Metrics

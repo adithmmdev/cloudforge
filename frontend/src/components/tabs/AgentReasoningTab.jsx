@@ -1,104 +1,161 @@
-import React from 'react';
-import { Network, Search, AlertTriangle, CheckCircle, Activity, Bot, Cpu } from 'lucide-react';
+import React, { useState } from 'react';
+import { Activity, ShieldCheck, CheckCircle, XCircle, ChevronRight, Server, Cloud } from 'lucide-react';
 
-export default function AgentReasoningTab({ diagnosis, remediationAction, autonomyMode, isLocalActive, deploymentId }) {
-  if (!diagnosis) {
+export default function AgentReasoningTab({ diagnoses, diagnosis, remediationAction, autonomyMode }) {
+  const allDiagnoses = diagnoses && diagnoses.length > 0 ? diagnoses : (diagnosis ? [diagnosis] : []);
+
+  if (allDiagnoses.length === 0) {
     return (
-      <div className="p-6 h-64 flex flex-col items-center justify-center text-gray-500 bg-gray-900 rounded-b-md">
-        <Activity className="w-8 h-8 mb-3 text-gray-700 animate-pulse" />
-        <p className="text-[13px] font-mono">Awaiting diagnostic telemetry...</p>
+      <div className="p-6 h-64 flex flex-col items-center justify-center text-gray-400">
+        <Activity className="w-8 h-8 mb-3 text-gray-300 animate-pulse" />
+        <p className="text-[13px] font-medium">Awaiting diagnostic telemetry...</p>
       </div>
     );
   }
 
-  const isCloud = diagnosis.model_tier === 'cloud';
-  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   return (
-    <div className="bg-[#0A0A0A] min-h-full text-green-500 font-mono text-[12px] p-6 rounded-b-md shadow-inner overflow-hidden relative pb-12">
-      <div className="absolute inset-0 pointer-events-none opacity-5" style={{ backgroundImage: 'linear-gradient(#333 1px, transparent 1px), linear-gradient(90deg, #333 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
-      
-      <div className="relative z-10 max-w-4xl mx-auto">
-        <div className="flex items-center justify-between border-b border-green-900/50 pb-4 mb-6">
-          <div className="flex items-center gap-3">
-            <Bot className="w-5 h-5 text-green-400" />
-            <h2 className="text-[14px] font-bold text-green-400 tracking-widest uppercase">Agentic Reasoning Stream</h2>
-          </div>
-          <div className="flex items-center gap-4 text-[10px]">
-            <span className="flex items-center gap-1.5"><Cpu className="w-3.5 h-3.5"/> NODE: {isCloud ? diagnosis.cloud_provider?.toUpperCase() : 'OLLAMA LOCAL'}</span>
-            <span className="flex items-center gap-1.5"><Network className="w-3.5 h-3.5"/> CONFIDENCE: {(diagnosis.confidence * 100).toFixed(1)}%</span>
-          </div>
+    <div className="p-6 space-y-6 bg-gray-50/50 min-h-full">
+      <div className="max-w-4xl mx-auto space-y-6">
+        
+        <div className="flex items-center justify-between pb-2 border-b border-gray-200">
+          <h2 className="text-[14px] font-bold text-gray-800 tracking-wide uppercase flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-indigo-500" />
+            Agent Decision Trace
+          </h2>
         </div>
 
-        <div className="mb-6">
-          <div className="text-[10px] text-green-700 mb-2 font-bold tracking-wider">] COGNITIVE TRACE</div>
-          <div className="bg-[#111] border border-green-900/30 rounded p-4 text-green-300 leading-relaxed break-words shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]">
-            {diagnosis.reasoning?.split('\n').map((line, i) => (
-              <div key={i} className="mb-1">{line || '\u00A0'}</div>
-            ))}
-          </div>
-        </div>
+        <div className="space-y-4">
+          {allDiagnoses.map((diag, idx) => {
+            const isLatest = idx === allDiagnoses.length - 1;
+            const isCloud = diag.model_tier === 'cloud';
+            const actionType = diag.action_type || 'NONE';
+            
+            // Try to extract summary and evidence from reasoning
+            let summary = diag.reasoning || '';
+            let evidence = 'Evidence gathered from build logs and environment.';
+            if (diag.reasoning?.includes('Evidence:')) {
+              const parts = diag.reasoning.split('Evidence:');
+              summary = parts[0].replace('Root Cause:', '').trim();
+              evidence = parts[1].trim();
+            }
 
-        <div className="mb-6">
-          <div className="text-[10px] text-green-700 mb-2 font-bold tracking-wider">] ACTION VECTOR</div>
-          <div className="flex gap-4">
-            <div className="bg-[#111] border border-green-900/30 rounded p-4 flex-1">
-              <div className="text-gray-500 text-[10px] mb-1">PROPOSED OP</div>
-              <div className="text-green-400 font-bold text-[13px]">{diagnosis.action_type}</div>
-            </div>
-            <div className="bg-[#111] border border-green-900/30 rounded p-4 flex-[2]">
-              <div className="text-gray-500 text-[10px] mb-1">PARAMETERS</div>
-              <div className="text-green-500 whitespace-pre-wrap">
-                {Object.keys(diagnosis.params || {}).length > 0 
-                  ? JSON.stringify(diagnosis.params, null, 2)
-                  : '{ "NO_PARAMS": true }'}
+            return (
+              <div key={diag.id || idx} className="border border-gray-200 rounded-lg bg-white overflow-hidden shadow-sm">
+                <div className={`px-4 py-3 border-b flex items-center justify-between ${isCloud ? 'bg-indigo-50/50 border-indigo-100' : 'bg-gray-50 border-gray-200'}`}>
+                  <div>
+                    <div className="text-[12px] font-bold text-gray-800 tracking-wider">
+                      ATTEMPT {idx + 1}
+                    </div>
+                    <div className="text-[11px] text-gray-500 flex items-center gap-1.5 mt-0.5 font-medium">
+                      {isCloud ? <Cloud className="w-3.5 h-3.5 text-indigo-500" /> : <Server className="w-3.5 h-3.5 text-gray-500" />}
+                      {isCloud ? 'Cloud Escalation • ' + (diag.cloud_provider || 'NVIDIA NIM') : 'Local • Ollama'}
+                    </div>
+                  </div>
+                  {isLatest && remediationAction?.status === 'discarded' ? (
+                     <div className="px-2 py-1 bg-red-100 text-red-700 text-[10px] font-bold rounded">ESCALATING / HALTED</div>
+                  ) : (
+                     <div className="px-2 py-1 bg-gray-100 text-gray-600 text-[10px] font-bold rounded">{(diag.confidence * 100).toFixed(1)}% CONFIDENCE</div>
+                  )}
+                </div>
+                
+                <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-[12px]">
+                  
+                  {/* Left Column: Diagnosis */}
+                  <div className="space-y-4">
+                    <div>
+                      <div className="text-[10px] text-gray-400 font-bold mb-1 tracking-wider">FAILURE SUMMARY</div>
+                      <div className="text-gray-800 font-medium leading-relaxed">{summary}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-gray-400 font-bold mb-1 tracking-wider">EVIDENCE</div>
+                      <div className="text-gray-600 leading-relaxed bg-gray-50 p-2 rounded border border-gray-100 italic">{evidence}</div>
+                    </div>
+                  </div>
+                  
+                  {/* Right Column: Action */}
+                  <div className="space-y-4">
+                    <div>
+                      <div className="text-[10px] text-gray-400 font-bold mb-1 tracking-wider">PROPOSED ACTION</div>
+                      <div className={`font-mono font-bold text-[13px] ${actionType === 'NONE' ? 'text-red-500' : 'text-indigo-600'}`}>
+                        {actionType}
+                      </div>
+                    </div>
+                    
+                    {actionType !== 'NONE' && (
+                      <div>
+                        <div className="text-[10px] text-gray-400 font-bold mb-1 tracking-wider">PARAMETERS</div>
+                        <div className="font-mono text-gray-700 bg-gray-50 p-2 rounded border border-gray-100 whitespace-pre-wrap">
+                          {Object.keys(diag.params || {}).length > 0 
+                            ? JSON.stringify(diag.params, null, 2)
+                            : '{ "NO_PARAMS": true }'}
+                        </div>
+                      </div>
+                    )}
+
+                    {isLatest && remediationAction && actionType !== 'NONE' && (
+                      <div className="pt-2">
+                        <div className="text-[10px] text-gray-400 font-bold mb-1 tracking-wider">STATUS</div>
+                        <div className="flex items-center gap-2">
+                          {remediationAction.status === 'promoted' ? <CheckCircle className="w-4 h-4 text-emerald-500" /> :
+                           remediationAction.status === 'rejected' ? <XCircle className="w-4 h-4 text-red-500" /> :
+                           <ChevronRight className="w-4 h-4 text-amber-500" />}
+                          <span className={`font-semibold uppercase tracking-wider ${
+                            remediationAction.status === 'promoted' ? 'text-emerald-600' :
+                            remediationAction.status === 'rejected' ? 'text-red-600' :
+                            'text-amber-600'
+                          }`}>
+                            {remediationAction.status.replace('_', ' ')}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+
+                {/* Interactive Controls for Latest Attempt */}
+                {isLatest && remediationAction?.status === 'awaiting_approval' && (
+                  <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+                    <span className="text-[11px] text-gray-500 font-medium">Autonomy: {autonomyMode.replace('_', ' ').toUpperCase()} — Requires Human Approval</span>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        disabled={isSubmitting}
+                        onClick={async () => {
+                          try {
+                            setIsSubmitting(true);
+                            await fetch(`/api/remediation-actions/${remediationAction.id}/approve`, { method: 'POST' });
+                          } catch (e) {
+                            setIsSubmitting(false);
+                          }
+                        }}
+                        className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold rounded shadow-sm transition-colors disabled:opacity-50"
+                      >
+                        {isSubmitting ? 'APPROVING...' : 'APPROVE ACTION'}
+                      </button>
+                      <button 
+                        disabled={isSubmitting}
+                        onClick={async () => {
+                          try {
+                            setIsSubmitting(true);
+                            await fetch(`/api/remediation-actions/${remediationAction.id}/reject`, { method: 'POST' });
+                          } catch (e) {
+                            setIsSubmitting(false);
+                          }
+                        }}
+                        className="px-4 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-red-600 text-[11px] font-bold rounded shadow-sm transition-colors disabled:opacity-50"
+                      >
+                        {isSubmitting ? 'REJECTING...' : 'REJECT'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          </div>
+            );
+          })}
         </div>
 
-        <div className="border border-green-900/50 rounded p-4 bg-green-950/10 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {autonomyMode === 'suggest_only' ? <Search className="w-5 h-5 text-blue-500" /> : 
-             autonomyMode === 'approve_each' ? <AlertTriangle className="w-5 h-5 text-amber-500" /> :
-             <CheckCircle className="w-5 h-5 text-green-500" />}
-            <div>
-              <div className="text-[10px] text-gray-500">AUTONOMY PROTOCOL</div>
-              <div className="font-bold text-[13px] uppercase text-gray-300">{autonomyMode.replace('_', ' ')}</div>
-            </div>
-          </div>
-          
-          {remediationAction?.status === 'awaiting_approval' && (
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={async () => {
-                  try {
-                    await fetch(`/api/remediation-actions/${remediationAction.id}/approve`, { method: 'POST' });
-                  } catch (e) {}
-                }}
-                className="px-3 py-1.5 bg-green-900/50 hover:bg-green-800 text-green-300 text-[11px] font-bold rounded border border-green-700 transition-colors"
-              >
-                APPROVE ACTION
-              </button>
-              <button 
-                onClick={async () => {
-                  try {
-                    await fetch(`/api/remediation-actions/${remediationAction.id}/reject`, { method: 'POST' });
-                  } catch (e) {}
-                }}
-                className="px-3 py-1.5 bg-red-900/30 hover:bg-red-900/50 text-red-400 text-[11px] font-bold rounded border border-red-900/50 transition-colors"
-              >
-                REJECT
-              </button>
-            </div>
-          )}
-
-          <div className="text-right">
-            <div className="text-[10px] text-gray-500">EXECUTION STATUS</div>
-            <div className={`font-bold text-[13px] uppercase ${remediationAction?.status === 'discarded' ? 'text-red-400' : 'text-green-400'}`}>
-              {remediationAction ? (remediationAction.status === 'discarded' ? 'HALTED (NO FIX PROPOSED)' : remediationAction.status) : (autonomyMode === 'suggest_only' ? 'HALTED' : 'PENDING')}
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

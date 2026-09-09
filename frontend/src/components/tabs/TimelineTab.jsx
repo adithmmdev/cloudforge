@@ -137,7 +137,9 @@ export default function TimelineTab({ events, currentStage, deployment }) {
                             <div className="mt-1.5 bg-gray-900 rounded p-3 font-mono text-[10px] text-gray-300 shadow-sm border border-gray-800">
                               <div className="flex items-center justify-between mb-2 pb-2 border-b border-gray-800">
                                 <span className="text-indigo-400 font-bold uppercase tracking-wider">DIAGNOSIS YIELD</span>
-                                <span className="text-gray-500">PROVIDER: {diag.cloud_provider || 'unknown'}</span>
+                                <span className={diag.model_tier === 'cloud' ? 'text-indigo-400 font-bold' : 'text-gray-500'}>
+                                  {diag.model_tier === 'cloud' ? `CLOUD ESCALATION • ${diag.cloud_provider || 'NVIDIA NIM'}` : 'LOCAL • OLLAMA'}
+                                </span>
                               </div>
                               <div className="mb-2">
                                 <span className="text-gray-500 mr-2">ROOT CAUSE:</span>
