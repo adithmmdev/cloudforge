@@ -76,8 +76,7 @@ function DeploymentBadge({ deployment }) {
 
 function ProjectSelector({ projects, selectedId, onChange }) {
   const selected = projects.find(p => p.id === selectedId);
-  const displayProjects = projects.filter(p => p.status || p.last_deployment_id)
-    .concat(projects.filter(p => !p.status && !p.last_deployment_id).slice(0, 20));
+  const displayProjects = projects;
   const unique = Array.from(new Map(displayProjects.map(p => [p.id, p])).values());
 
   return (
