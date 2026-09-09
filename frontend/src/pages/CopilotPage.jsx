@@ -92,7 +92,7 @@ function ProjectSelector({ projects, selectedId, onChange }) {
         ) : (
           unique.map(p => (
             <option key={p.id} value={p.id}>
-              {p.name}
+              #{p.id} — {p.name} {p.framework ? `(${p.framework})` : ''}
             </option>
           ))
         )}
@@ -314,7 +314,7 @@ export default function CopilotPage() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <p className="text-[15px] font-semibold text-slate-900 leading-none">Nova AI</p>
+                <p className="text-[15px] font-semibold text-slate-900 leading-none">Niggex AI</p>
               </div>
             </div>
           </div>
