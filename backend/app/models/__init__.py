@@ -14,10 +14,17 @@ from .disclosure import Disclosure
 from .remediation_action import RemediationAction
 from .shadow_test import ShadowTest
 from .deployment_report import DeploymentReport
+from .copilot_session import CopilotSession
+from .copilot_message import CopilotMessage
+
+from .aws_copilot_session import AWSCopilotSession
+from .aws_copilot_message import AWSCopilotMessage
 
 __all__ = [
     "Base", "User", "Project", "AutonomySetting", "Instance", 
     "AWSSetupState", "Deployment", "StageEvent", "Container", 
     "Metric", "Failure", "Diagnosis", "Disclosure", 
-    "RemediationAction", "ShadowTest", "DeploymentReport"
+    "RemediationAction", "ShadowTest", "DeploymentReport",
+    "CopilotSession", "CopilotMessage",
+    "AWSCopilotSession", "AWSCopilotMessage"
 ]

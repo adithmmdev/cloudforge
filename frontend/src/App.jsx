@@ -11,6 +11,7 @@ import ProjectDetail from './pages/ProjectDetail.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import ControlCenter from './pages/ControlCenter.jsx';
 import CopilotPage from './pages/CopilotPage.jsx';
+import AwsCopilotPage from './pages/AwsCopilotPage.jsx';
 
 // ============================================================================
 // Layout Components
@@ -21,6 +22,7 @@ function Sidebar() {
     { to: '/', icon: LayoutDashboard, label: 'Mission Control', exact: true },
     { to: '/upload', icon: UploadCloud, label: 'New Project' },
     { to: '/copilot', icon: MessageSquare, label: 'Niggex AI' },
+    { to: '/aws-copilot', icon: MessageSquare, label: 'AWS Copilot' },
     { to: '/aws-setup', icon: Cpu, label: 'AWS Setup' },
     { to: '/control', icon: Activity, label: 'Control Center' },
     { to: '/settings', icon: Settings, label: 'Settings' },
@@ -144,6 +146,7 @@ export default function App() {
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/control" element={<ControlCenter />} />
             <Route path="/copilot" element={<CopilotPage />} />
+            <Route path="/aws-copilot" element={<AwsCopilotPage />} />
           </Routes>
         </main>
       </div>
