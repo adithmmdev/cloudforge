@@ -1,10 +1,12 @@
-﻿import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart
 } from 'recharts';
 import { Activity, Cpu, Server, HardDrive } from 'lucide-react';
 
-const COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
+// CF design system colors for chart lines
+const COLORS = ['#5E6AD2', '#22c55e', '#f59e0b', '#f43f5e', '#a78bfa'];
+
 
 export default function MetricsTab({ deploymentId, liveMetrics }) {
   const [historical, setHistorical] = useState([]);

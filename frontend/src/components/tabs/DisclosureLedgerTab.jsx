@@ -1,20 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, ChevronDown, ChevronUp } from 'lucide-react';
 
+// ── Dark destination styles ────────────────────────────────────
 const DEST_STYLES = {
-  anthropic_api:  { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-700', label: 'Anthropic' },
-  anthropic:      { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-700', label: 'Anthropic' },
-  openai:         { bg: 'bg-green-50',  border: 'border-green-200',  text: 'text-green-700',  label: 'OpenAI' },
-  glm_api:        { bg: 'bg-blue-50',   border: 'border-blue-200',   text: 'text-blue-700',   label: 'GLM / Z.ai' },
-  nvidia_nim_api: { bg: 'bg-green-50',  border: 'border-green-200',  text: 'text-green-700',  label: 'NVIDIA NIM' },
-  nvidia_nim:     { bg: 'bg-green-50',  border: 'border-green-200',  text: 'text-green-700',  label: 'NVIDIA NIM' },
-  kimi_api:       { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-700', label: 'Moonshot (Kimi)' },
-  kimi:           { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-700', label: 'Moonshot (Kimi)' },
-  moonshotai:     { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-700', label: 'Moonshot (Kimi)' },
-  ollama:         { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-700', label: 'Local (Ollama)' },
+  anthropic_api:  { color: '#fb923c', bg: 'rgba(251,146,60,0.1)',   border: 'rgba(251,146,60,0.2)',   label: 'Anthropic' },
+  anthropic:      { color: '#fb923c', bg: 'rgba(251,146,60,0.1)',   border: 'rgba(251,146,60,0.2)',   label: 'Anthropic' },
+  openai:         { color: '#4ade80', bg: 'rgba(74,222,128,0.1)',   border: 'rgba(74,222,128,0.2)',   label: 'OpenAI' },
+  glm_api:        { color: '#60a5fa', bg: 'rgba(96,165,250,0.1)',   border: 'rgba(96,165,250,0.2)',   label: 'GLM / Z.ai' },
+  nvidia_nim_api: { color: '#4ade80', bg: 'rgba(74,222,128,0.1)',   border: 'rgba(74,222,128,0.2)',   label: 'NVIDIA NIM' },
+  nvidia_nim:     { color: '#4ade80', bg: 'rgba(74,222,128,0.1)',   border: 'rgba(74,222,128,0.2)',   label: 'NVIDIA NIM' },
+  kimi_api:       { color: '#c4b5fd', bg: 'rgba(196,181,253,0.1)',  border: 'rgba(196,181,253,0.2)',  label: 'Moonshot (Kimi)' },
+  kimi:           { color: '#c4b5fd', bg: 'rgba(196,181,253,0.1)',  border: 'rgba(196,181,253,0.2)',  label: 'Moonshot (Kimi)' },
+  moonshotai:     { color: '#c4b5fd', bg: 'rgba(196,181,253,0.1)',  border: 'rgba(196,181,253,0.2)',  label: 'Moonshot (Kimi)' },
+  ollama:         { color: '#818cf8', bg: 'rgba(129,140,248,0.1)',  border: 'rgba(129,140,248,0.2)',  label: 'Local (Ollama)' },
 };
 
+// ── Disclosure row ─────────────────────────────────────────────
 function DisclosureRow({ entry }) {
+  // ── Unchanged expand state logic ──────────────────────────
   const [expanded, setExpanded] = useState(false);
   const d = DEST_STYLES[entry.destination] || DEST_STYLES.anthropic;
   let parsed;
@@ -22,22 +25,28 @@ function DisclosureRow({ entry }) {
 
   return (
     <>
-      <tr className="border-b border-gray-100 hover:bg-gray-50">
-        <td className="px-4 py-2.5 font-mono text-[11px] text-gray-400">
+      <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+        <td className="px-4 py-2.5 font-mono text-xs" style={{ color: '#8A8F98' }}>
           {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '—'}
         </td>
         <td className="px-4 py-2.5">
-          <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-medium border ${d.bg} ${d.border} ${d.text}`}>
+          <span
+            className="inline-flex px-2 py-0.5 rounded text-xs font-semibold border"
+            style={{ background: d.bg, borderColor: d.border, color: d.color }}
+          >
             {d.label}
           </span>
         </td>
-        <td className="px-4 py-2.5 font-mono text-[11px] text-gray-600 max-w-xs truncate">
+        <td className="px-4 py-2.5 font-mono text-xs max-w-xs truncate" style={{ color: '#8A8F98' }}>
           {typeof entry.content_sent === 'string' ? entry.content_sent.slice(0, 80) + '...' : '—'}
         </td>
         <td className="px-4 py-2.5">
           <button
             onClick={() => setExpanded(!expanded)}
-            className="flex items-center gap-1 text-[11px] text-indigo-600 hover:text-indigo-800"
+            className="flex items-center gap-1 text-xs transition-colors duration-150"
+            style={{ color: '#5E6AD2' }}
+            onMouseEnter={e => e.currentTarget.style.color = '#6872D9'}
+            onMouseLeave={e => e.currentTarget.style.color = '#5E6AD2'}
           >
             {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             {expanded ? 'Collapse' : 'Expand'}
@@ -45,12 +54,17 @@ function DisclosureRow({ entry }) {
         </td>
       </tr>
       {expanded && (
-        <tr className="bg-gray-50">
-          <td colSpan={4} className="px-4 py-3">
-            <div className="bg-gray-900 rounded p-3 font-mono text-[10px] text-gray-300 overflow-auto max-h-48">
-              {parsed
-                ? JSON.stringify(parsed, null, 2)
-                : entry.content_sent}
+        <tr>
+          <td colSpan={4} className="px-4 py-3" style={{ background: 'rgba(0,0,0,0.3)' }}>
+            <div
+              className="rounded p-3 font-mono text-xs overflow-auto max-h-48"
+              style={{
+                background: 'rgba(0,0,0,0.5)',
+                border: '1px solid rgba(255,255,255,0.07)',
+                color: 'rgba(237,237,239,0.8)',
+              }}
+            >
+              {parsed ? JSON.stringify(parsed, null, 2) : entry.content_sent}
             </div>
           </td>
         </tr>
@@ -59,13 +73,13 @@ function DisclosureRow({ entry }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────
 export default function DisclosureLedgerTab({ deploymentId, liveDisclosures }) {
+  // ── Unchanged data fetching logic ─────────────────────────
   const [disclosures, setDisclosures] = useState([]);
 
-  // Normalize disclosure record from either REST or WS shape
   const normalize = (d) => ({
     ...d,
-    // REST: provider_name / redacted_signature  |  WS: destination / content_sent
     destination:  d.destination  || d.provider_name  || d.provider || 'unknown',
     content_sent: d.content_sent || d.redacted_signature || d.payload || '',
     id: d.id || Math.random().toString(36).substr(2, 9),
@@ -84,31 +98,40 @@ export default function DisclosureLedgerTab({ deploymentId, liveDisclosures }) {
     ...liveDisclosures.map(normalize).filter(l => !disclosures.find(d => d.id === l.id)),
   ];
 
+  // ─────────────────────────────────────────────────────────
   return (
     <div className="p-6">
-      <div className="mb-4">
-        <h3 className="text-[13px] font-semibold text-gray-700">Disclosure Ledger</h3>
-        <p className="text-[12px] text-gray-400 mt-0.5 flex items-center gap-1.5">
-          <Shield className="w-3.5 h-3.5 text-emerald-500" />
+      <div className="mb-5">
+        <h3 className="text-sm font-semibold mb-1" style={{ color: '#EDEDEF' }}>Disclosure Ledger</h3>
+        <p className="text-xs flex items-center gap-1.5" style={{ color: '#8A8F98' }}>
+          <Shield className="w-3.5 h-3.5" style={{ color: '#22c55e' }} />
           Privacy audit trail — raw source code is never included. Only redacted 7-field signatures are transmitted.
         </p>
       </div>
 
-      <div className="border border-gray-200 rounded overflow-hidden">
-        <table className="w-full text-[12px]">
+      <div
+        className="rounded-lg overflow-hidden"
+        style={{ border: '1px solid rgba(255,255,255,0.07)' }}
+      >
+        <table className="w-full text-xs">
           <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="px-4 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
-              <th className="px-4 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">Destination</th>
-              <th className="px-4 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">Payload Preview</th>
-              <th className="px-4 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">Full Payload</th>
+            <tr style={{ background: 'rgba(255,255,255,0.025)', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+              {['Timestamp', 'Destination', 'Payload Preview', 'Full Payload'].map(h => (
+                <th
+                  key={h}
+                  className="px-4 py-2.5 text-left font-semibold uppercase tracking-[0.07em]"
+                  style={{ color: '#8A8F98', fontSize: '10px' }}
+                >
+                  {h}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {all.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-[13px] text-gray-400">
-                  <Shield className="w-6 h-6 mx-auto mb-2 text-emerald-400" />
+                <td colSpan={4} className="px-4 py-10 text-center text-sm" style={{ color: '#8A8F98' }}>
+                  <Shield className="w-6 h-6 mx-auto mb-2" style={{ color: '#22c55e' }} />
                   No cloud disclosures — local LLM handled all diagnoses
                 </td>
               </tr>

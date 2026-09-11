@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { CheckCircle, Loader2, XCircle, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 const STEPS = [
   { key: 'validating_iam',  label: 'Validate IAM Permissions',  detail: 'sts:GetCallerIdentity + ec2:DescribeInstances' },
@@ -18,37 +19,32 @@ function StepRow({ step, status, logs }) {
     if (status === 'active') setExpanded(true);
   }, [status]);
 
+  const styleMap = {
+    active: { border: 'rgba(94,106,210,0.4)',   bg: 'rgba(94,106,210,0.05)',   text: '#818cf8', icon: <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#818cf8' }} /> },
+    done:   { border: 'rgba(34,197,94,0.3)',    bg: 'rgba(34,197,94,0.05)',    text: '#4ade80', icon: <CheckCircle className="w-4 h-4" style={{ color: '#22c55e' }} /> },
+    failed: { border: 'rgba(244,63,94,0.4)',    bg: 'rgba(244,63,94,0.05)',    text: '#fb7185', icon: <XCircle className="w-4 h-4" style={{ color: '#f43f5e' }} /> },
+    pending:{ border: 'rgba(255,255,255,0.08)', bg: 'rgba(255,255,255,0.02)',  text: '#8A8F98', icon: <div className="w-4 h-4 rounded-full border-2" style={{ borderColor: 'rgba(255,255,255,0.2)' }} /> }
+  };
+  const s = styleMap[status] || styleMap.pending;
+
   return (
-    <div className={`border rounded mb-2 transition-all ${
-      status === 'active' ? 'border-indigo-300 bg-indigo-50' :
-      status === 'done'   ? 'border-emerald-200 bg-emerald-50' :
-      status === 'failed' ? 'border-red-200 bg-red-50' :
-      'border-gray-200 bg-white'
-    }`}>
+    <div className="rounded mb-2 transition-all duration-300" style={{ border: `1px solid ${s.border}`, background: s.bg }}>
       <button
         className="w-full flex items-center gap-3 px-4 py-2.5 text-left"
         onClick={() => setExpanded(!expanded)}
       >
-        <div className="flex-shrink-0">
-          {status === 'done'   ? <CheckCircle className="w-4 h-4 text-emerald-500" /> :
-           status === 'active' ? <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" /> :
-           status === 'failed' ? <XCircle className="w-4 h-4 text-red-500" /> :
-           <div className="w-4 h-4 rounded-full border-2 border-gray-300" />}
-        </div>
-        <span className={`text-[13px] font-medium flex-1 ${
-          status === 'done' ? 'text-emerald-700' :
-          status === 'active' ? 'text-indigo-700' :
-          status === 'failed' ? 'text-red-700' : 'text-gray-500'
-        }`}>
+        <div className="flex-shrink-0">{s.icon}</div>
+        <span className="text-[13px] font-medium flex-1 transition-colors" style={{ color: s.text }}>
           {step.label}
         </span>
-        <span className="text-[11px] text-gray-400">{step.detail}</span>
+        <span className="text-[11px] font-mono" style={{ color: '#8A8F98' }}>{step.detail}</span>
         {logs?.length > 0 && (
-          expanded ? <ChevronUp className="w-3.5 h-3.5 text-gray-400" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+          expanded ? <ChevronUp className="w-3.5 h-3.5" style={{ color: '#8A8F98' }} /> : <ChevronDown className="w-3.5 h-3.5" style={{ color: '#8A8F98' }} />
         )}
       </button>
       {expanded && logs?.length > 0 && (
-        <div className="mx-4 mb-3 bg-gray-900 rounded p-3 font-mono text-[11px] text-gray-300 max-h-32 overflow-y-auto">
+        <div className="mx-4 mb-3 rounded p-3 font-mono text-[11px] max-h-32 overflow-y-auto"
+          style={{ background: 'rgba(0,0,0,0.4)', color: 'rgba(237,237,239,0.8)', border: '1px solid rgba(255,255,255,0.07)' }}>
           {logs.map((l, i) => <div key={i}>{l}</div>)}
         </div>
       )}
@@ -156,7 +152,7 @@ export default function AWSSetup() {
   if (loading) {
     return (
       <div className="p-6 flex items-center justify-center h-64">
-        <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
+        <Loader2 className="w-6 h-6 animate-spin" style={{ color: '#5E6AD2' }} />
       </div>
     );
   }
@@ -164,26 +160,31 @@ export default function AWSSetup() {
   const isComplete = setupStatus?.status === 'complete' && !running;
 
   return (
-    <div className="p-6">
+    <motion.div 
+      className="p-8"
+      initial={{ opacity: 0, y: 15 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+    >
       <div className="max-w-4xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-[20px] font-semibold text-gray-900">AWS Setup Wizard</h1>
-          <p className="text-[13px] text-gray-500 mt-0.5">
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold tracking-tight text-[#EDEDEF]">AWS Infrastructure Setup</h1>
+          <p className="text-sm mt-1" style={{ color: '#8A8F98' }}>
             Automate AWS Day-0 prerequisites — Security Group, Key Pair, AMI detection, IAM validation.
           </p>
         </div>
 
-        {/* Already configured banner */}
         {isComplete && !running && (
-          <div className="mb-4 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded flex items-center justify-between gap-3">
+          <div className="mb-6 px-4 py-3 rounded flex items-center justify-between gap-3 shadow-sm"
+            style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)' }}>
             <div className="flex items-center gap-3">
-              <CheckCircle className="w-5 h-5 text-emerald-500 flex-shrink-0" />
+              <CheckCircle className="w-5 h-5 flex-shrink-0" style={{ color: '#4ade80' }} />
               <div>
-                <p className="text-[13px] font-medium text-emerald-800">AWS Infrastructure Configured</p>
-                <p className="text-[12px] text-emerald-600 mt-0.5">
-                  SG: <span className="font-mono">{setupStatus?.sg_id || 'N/A'}</span> ·
-                  Key: <span className="font-mono">{setupStatus?.key_pair_name || 'N/A'}</span> ·
-                  Region: <span className="font-mono">{setupStatus?.region || 'us-east-1'}</span>
+                <p className="text-sm font-semibold" style={{ color: '#4ade80' }}>AWS Infrastructure Configured</p>
+                <p className="text-[12px] mt-0.5" style={{ color: '#22c55e' }}>
+                  SG: <span className="font-mono bg-black/20 px-1 rounded">{setupStatus?.sg_id || 'N/A'}</span> ·{' '}
+                  Key: <span className="font-mono bg-black/20 px-1 rounded">{setupStatus?.key_pair_name || 'N/A'}</span> ·{' '}
+                  Region: <span className="font-mono bg-black/20 px-1 rounded">{setupStatus?.region || 'us-east-1'}</span>
                 </p>
               </div>
             </div>
@@ -199,40 +200,37 @@ export default function AWSSetup() {
                   }
                 } catch(e) {}
               }}
-              className="px-3 py-1.5 bg-red-100 text-red-700 hover:bg-red-200 font-medium text-[12px] rounded transition-colors"
+              className="px-3 py-1.5 font-medium text-[12px] rounded transition-all shadow-sm"
+              style={{ background: 'rgba(244,63,94,0.15)', color: '#fb7185', border: '1px solid rgba(244,63,94,0.3)' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(244,63,94,0.25)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(244,63,94,0.15)'}
             >
               Remove Credentials
             </button>
           </div>
         )}
 
-        <div className="flex gap-6">
-          {/* Left: Stepper */}
+        <div className="flex gap-8">
           <div className="w-64 flex-shrink-0">
-            <div className="border border-gray-200 rounded overflow-hidden">
-              <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-                <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Setup Steps</p>
+            <div className="rounded-xl overflow-hidden shadow-sm cf-card">
+              <div className="px-4 py-3" style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+                <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#8A8F98' }}>Setup Pipeline</p>
               </div>
               <div className="p-3">
                 {STEPS.map((step, idx) => {
                   const status = getStepStatus(step.key);
+                  const styleMap = {
+                    done:   { color: '#4ade80', icon: <CheckCircle className="w-4 h-4" style={{ color: '#22c55e' }} /> },
+                    active: { color: '#818cf8', icon: <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#818cf8' }} /> },
+                    failed: { color: '#fb7185', icon: <XCircle className="w-4 h-4" style={{ color: '#f43f5e' }} /> },
+                    pending:{ color: '#8A8F98', icon: <div className="w-5 h-5 rounded-full border-2 flex items-center justify-center" style={{ borderColor: 'rgba(255,255,255,0.1)' }}><span className="text-[9px] font-mono" style={{ color: 'rgba(255,255,255,0.3)' }}>{idx + 1}</span></div> }
+                  };
+                  const s = styleMap[status];
+
                   return (
                     <div key={step.key} className="flex items-center gap-2.5 py-2">
-                      <div className="flex-shrink-0 w-6 h-6 flex items-center justify-center">
-                        {status === 'done'   ? <CheckCircle className="w-4 h-4 text-emerald-500" /> :
-                         status === 'active' ? <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" /> :
-                         status === 'failed' ? <XCircle className="w-4 h-4 text-red-500" /> :
-                         <div className="w-5 h-5 rounded-full border-2 border-gray-200 flex items-center justify-center">
-                           <span className="text-[9px] text-gray-400 font-mono">{idx + 1}</span>
-                         </div>}
-                      </div>
-                      <span className={`text-[12px] ${
-                        status === 'done' ? 'text-emerald-700 font-medium' :
-                        status === 'active' ? 'text-indigo-700 font-medium' :
-                        status === 'failed' ? 'text-red-700' : 'text-gray-500'
-                      }`}>
-                        {step.label}
-                      </span>
+                      <div className="flex-shrink-0 w-6 h-6 flex items-center justify-center">{s.icon}</div>
+                      <span className="text-[12px] font-medium transition-colors" style={{ color: s.color }}>{step.label}</span>
                     </div>
                   );
                 })}
@@ -240,14 +238,13 @@ export default function AWSSetup() {
             </div>
           </div>
 
-          {/* Right: Form / Progress */}
           <div className="flex-1">
             {!running && !isComplete ? (
-              <form onSubmit={handleRun} className="space-y-4">
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded text-[12px] text-amber-700 flex gap-2">
+              <form onSubmit={handleRun} className="space-y-5 p-6 rounded-xl shadow-sm cf-card">
+                <div className="p-4 rounded text-[12px] flex gap-2" style={{ background: 'rgba(245,158,11,0.1)', color: '#fbbf24', border: '1px solid rgba(245,158,11,0.2)' }}>
                   <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <div>
-                    Credentials are used only for initial setup and stored in your .env file.
+                  <div className="leading-relaxed">
+                    Credentials are used only for initial setup and stored securely in your .env file.
                     They are never logged or transmitted to any LLM provider.
                   </div>
                 </div>
@@ -257,60 +254,73 @@ export default function AWSSetup() {
                   { key: 'aws_secret_access_key', label: 'AWS Secret Access Key', type: 'password', placeholder: '••••••••••••••••••••••••••••••••••••••••' },
                 ].map(f => (
                   <div key={f.key}>
-                    <label className="block text-[12px] font-medium text-gray-700 mb-1">{f.label}</label>
+                    <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: '#8A8F98' }}>{f.label}</label>
                     <input
                       type={f.type}
                       value={form[f.key]}
                       onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
                       placeholder={f.placeholder}
-                      className="w-full px-3 py-2 border border-gray-300 rounded font-mono text-[12px] focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                      className="w-full px-3 py-2 border rounded font-mono text-sm transition-all focus:outline-none"
+                      style={{ background: 'rgba(0,0,0,0.2)', borderColor: 'rgba(255,255,255,0.1)', color: '#EDEDEF' }}
+                      onFocus={e => e.target.style.borderColor = '#5E6AD2'}
+                      onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
                       required
                     />
                   </div>
                 ))}
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[12px] font-medium text-gray-700 mb-1">AWS Region</label>
+                    <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: '#8A8F98' }}>AWS Region</label>
                     <select
                       value={form.aws_region}
                       onChange={e => setForm(prev => ({ ...prev, aws_region: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded text-[12px] focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 border rounded text-sm focus:outline-none"
+                      style={{ background: 'rgba(0,0,0,0.2)', borderColor: 'rgba(255,255,255,0.1)', color: '#EDEDEF' }}
+                      onFocus={e => e.target.style.borderColor = '#5E6AD2'}
+                      onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
                     >
                       {['us-east-1','us-east-2','us-west-1','us-west-2','eu-west-1','eu-central-1','ap-southeast-1','ap-south-1'].map(r => (
-                        <option key={r} value={r}>{r}</option>
+                        <option key={r} value={r} style={{ background: '#0a0a0c', color: '#EDEDEF' }}>{r}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[12px] font-medium text-gray-700 mb-1">Allowed SSH CIDR</label>
+                    <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style={{ color: '#8A8F98' }}>Allowed SSH CIDR</label>
                     <input
                       value={form.allowed_ssh_cidr}
                       onChange={e => setForm(prev => ({ ...prev, allowed_ssh_cidr: e.target.value }))}
                       placeholder="0.0.0.0/0"
-                      className="w-full px-3 py-2 border border-gray-300 rounded font-mono text-[12px] focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 border rounded font-mono text-sm focus:outline-none"
+                      style={{ background: 'rgba(0,0,0,0.2)', borderColor: 'rgba(255,255,255,0.1)', color: '#EDEDEF' }}
+                      onFocus={e => e.target.style.borderColor = '#5E6AD2'}
+                      onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
                     />
                     {form.allowed_ssh_cidr === '0.0.0.0/0' && (
-                      <p className="text-[10px] text-amber-600 mt-1">⚠ 0.0.0.0/0 allows SSH from any IP</p>
+                      <p className="text-[10px] mt-1.5 font-medium" style={{ color: '#fbbf24' }}>⚠ 0.0.0.0/0 allows SSH from any IP</p>
                     )}
                   </div>
                 </div>
 
                 {formError && (
-                  <div className="px-3 py-2 bg-red-50 border border-red-200 rounded text-[12px] text-red-700">
+                  <div className="px-3 py-2 rounded text-[12px] font-medium" style={{ background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.2)', color: '#fb7185' }}>
                     {formError}
                   </div>
                 )}
 
                 <button
                   type="submit"
-                  className="w-full py-2.5 text-[13px] font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 transition-all"
+                  className="w-full py-2.5 mt-2 text-sm font-semibold rounded transition-all shadow-sm flex items-center justify-center gap-2"
+                  style={{ background: '#5E6AD2', color: '#fff' }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#6872D9'}
+                  onMouseLeave={e => e.currentTarget.style.background = '#5E6AD2'}
                 >
-                  Run Full Setup
+                  <Play className="w-4 h-4 fill-current" />
+                  Run Full Setup Pipeline
                 </button>
               </form>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {STEPS.map(step => (
                   <StepRow
                     key={step.key}
@@ -321,12 +331,13 @@ export default function AWSSetup() {
                 ))}
 
                 {failedStep && (
-                  <div className="mt-4 px-4 py-3 bg-red-50 border border-red-200 rounded">
-                    <p className="text-[13px] font-medium text-red-800">Setup Failed</p>
-                    <p className="text-[12px] text-red-600 mt-1 font-mono">{failedStep}</p>
+                  <div className="mt-4 px-4 py-3 rounded" style={{ background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.2)' }}>
+                    <p className="text-[13px] font-semibold" style={{ color: '#f43f5e' }}>Setup Failed</p>
+                    <p className="text-[12px] mt-1 font-mono" style={{ color: '#fb7185' }}>{failedStep}</p>
                     <button
                       onClick={() => { setRunning(false); setFailedStep(null); }}
-                      className="mt-3 px-3 py-1.5 text-[12px] font-medium text-white bg-red-600 rounded hover:bg-red-700"
+                      className="mt-3 px-3 py-1.5 text-[12px] font-bold rounded hover:opacity-90"
+                      style={{ background: '#f43f5e', color: '#fff' }}
                     >
                       Retry Setup
                     </button>
@@ -334,9 +345,16 @@ export default function AWSSetup() {
                 )}
 
                 {finalConfig && (
-                  <div className="mt-4 p-4 bg-emerald-50 border border-emerald-200 rounded">
-                    <p className="text-[13px] font-semibold text-emerald-800 mb-3">✓ Setup Complete</p>
-                    <table className="w-full text-[12px]">
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="mt-6 p-6 rounded-xl border shadow-lg"
+                    style={{ background: 'linear-gradient(135deg, rgba(34,197,94,0.1) 0%, rgba(34,197,94,0.02) 100%)', borderColor: 'rgba(34,197,94,0.2)' }}
+                  >
+                    <p className="text-[15px] font-bold mb-4 flex items-center gap-2" style={{ color: '#4ade80' }}>
+                      <CheckCircle className="w-5 h-5" /> Setup Verified & Complete
+                    </p>
+                    <table className="w-full text-[13px]">
                       <tbody className="space-y-1">
                         {[
                           ['Security Group', finalConfig.sg_id],
@@ -345,23 +363,29 @@ export default function AWSSetup() {
                           ['Region', finalConfig.region],
                           ['Instance Type', finalConfig.instance_type || 't3.small'],
                         ].map(([k, v]) => v && (
-                          <tr key={k} className="border-b border-emerald-100">
-                            <td className="py-1.5 text-emerald-700 font-medium pr-4">{k}</td>
-                            <td className="py-1.5 font-mono text-emerald-800">{v}</td>
+                          <tr key={k} style={{ borderBottom: '1px solid rgba(34,197,94,0.1)' }}>
+                            <td className="py-2.5 font-medium pr-4" style={{ color: '#8A8F98' }}>{k}</td>
+                            <td className="py-2.5 font-mono text-right font-semibold" style={{ color: '#EDEDEF' }}>{v}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                    <Link to="/" className="mt-3 inline-block px-3 py-1.5 text-[12px] font-medium text-white bg-emerald-600 rounded hover:bg-emerald-700">
-                      Return to Dashboard
-                    </Link>
-                  </div>
+                    <div className="mt-6 flex justify-end">
+                      <Link 
+                        to="/" 
+                        className="px-4 py-2 text-[13px] font-bold rounded shadow-sm hover:opacity-90 transition-opacity"
+                        style={{ background: '#22c55e', color: '#fff' }}
+                      >
+                        Launch Mission Control
+                      </Link>
+                    </div>
+                  </motion.div>
                 )}
               </div>
             )}
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

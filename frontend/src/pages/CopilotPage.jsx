@@ -21,8 +21,9 @@ function ThinkingIndicator({ status, message, toolsUsed }) {
 
   return (
     <div className="flex items-start gap-4 mb-8 px-4 md:px-8 max-w-4xl mx-auto w-full">
-      <div className="flex-shrink-0 w-9 h-9 rounded-[14px] bg-indigo-50 border border-indigo-100 flex items-center justify-center shadow-sm mt-1">
-        <Loader2 size={16} className="text-indigo-600 animate-spin" />
+      <div className="flex-shrink-0 w-9 h-9 rounded-[14px] flex items-center justify-center shadow-sm mt-1"
+        style={{ background: 'rgba(94,106,210,0.1)', border: '1px solid rgba(94,106,210,0.3)' }}>
+        <Loader2 size={16} className="animate-spin" style={{ color: '#818cf8' }} />
       </div>
       <div className="flex-1 mt-1">
         <div className="flex flex-col gap-2">
@@ -36,14 +37,14 @@ function ThinkingIndicator({ status, message, toolsUsed }) {
             return (
               <div key={step.key} className={`flex items-center gap-2 transition-all duration-300 ${isActive ? 'opacity-100 translate-y-0' : 'opacity-60 -translate-y-1'}`}>
                 {isPast ? (
-                  <CheckCircle2 size={14} className="text-emerald-500" />
+                  <CheckCircle2 size={14} style={{ color: '#4ade80' }} />
                 ) : (
                   <span className="relative flex h-2 w-2 ml-1 mr-1">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500" />
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: '#818cf8' }} />
+                    <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: '#5E6AD2' }} />
                   </span>
                 )}
-                <span className={`text-[13px] font-medium ${isActive ? 'text-indigo-700' : 'text-slate-500'}`}>
+                <span className={`text-[13px] font-medium transition-colors`} style={{ color: isActive ? '#818cf8' : '#8A8F98' }}>
                   {isActive && message ? message : step.label}
                 </span>
               </div>
@@ -58,17 +59,20 @@ function ThinkingIndicator({ status, message, toolsUsed }) {
 function DeploymentBadge({ deployment }) {
   if (!deployment) return null;
   const s = (deployment.status || '').toLowerCase();
-  const cfg = s.includes('live') || s.includes('success')
-    ? { dot: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' }
-    : s.includes('fail') || s.includes('error') || s.includes('cancel')
-    ? { dot: 'bg-red-500', text: 'text-red-700', bg: 'bg-red-50 border-red-200' }
-    : s.includes('build') || s.includes('deploy')
-    ? { dot: 'bg-amber-500 animate-pulse', text: 'text-amber-700', bg: 'bg-amber-50 border-amber-200' }
-    : { dot: 'bg-slate-400', text: 'text-slate-600', bg: 'bg-slate-50 border-slate-200' };
+  
+  let cfg = { dot: '#94a3b8', text: '#94a3b8', bg: 'rgba(148,163,184,0.1)', border: 'rgba(148,163,184,0.2)', pulse: false };
+  if (s.includes('live') || s.includes('success')) {
+    cfg = { dot: '#22c55e', text: '#4ade80', bg: 'rgba(34,197,94,0.15)', border: 'rgba(34,197,94,0.3)', pulse: false };
+  } else if (s.includes('fail') || s.includes('error') || s.includes('cancel')) {
+    cfg = { dot: '#ef4444', text: '#f87171', bg: 'rgba(239,68,68,0.15)', border: 'rgba(239,68,68,0.3)', pulse: false };
+  } else if (s.includes('build') || s.includes('deploy')) {
+    cfg = { dot: '#f59e0b', text: '#fbbf24', bg: 'rgba(245,158,11,0.15)', border: 'rgba(245,158,11,0.3)', pulse: true };
+  }
 
   return (
-    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider border ${cfg.bg} ${cfg.text}`}>
-      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot}`} />
+    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider border"
+      style={{ background: cfg.bg, color: cfg.text, borderColor: cfg.border }}>
+      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.pulse ? 'animate-pulse' : ''}`} style={{ background: cfg.dot }} />
       #{deployment.id} {deployment.status}
     </div>
   );
@@ -84,19 +88,20 @@ function ProjectSelector({ projects, selectedId, onChange }) {
       <select
         value={selectedId || ''}
         onChange={e => onChange(parseInt(e.target.value))}
-        className="appearance-none pl-3 pr-8 py-1.5 text-sm font-medium bg-slate-50 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 cursor-pointer transition-all hover:bg-slate-100 outline-none"
+        className="appearance-none pl-3 pr-8 py-1.5 text-sm font-medium rounded-lg cursor-pointer transition-all outline-none focus:ring-2 focus:ring-indigo-500/50"
+        style={{ background: 'rgba(255,255,255,0.05)', color: '#EDEDEF', border: '1px solid rgba(255,255,255,0.1)' }}
       >
         {unique.length === 0 ? (
-          <option value="">No projects</option>
+          <option value="" style={{ background: '#0a0a0c', color: '#EDEDEF' }}>No projects</option>
         ) : (
           unique.map(p => (
-            <option key={p.id} value={p.id}>
+            <option key={p.id} value={p.id} style={{ background: '#0a0a0c', color: '#EDEDEF' }}>
               #{p.id} — {p.name} {p.framework ? `(${p.framework})` : ''}
             </option>
           ))
         )}
       </select>
-      <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover:text-slate-600 transition-colors" />
+      <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none transition-colors" style={{ color: '#8A8F98' }} />
     </div>
   );
 }
@@ -294,7 +299,7 @@ export default function CopilotPage() {
   const hasMessages = messages.length > 0 || (isStreaming && streamSessionId === activeSessionId);
 
   return (
-    <div className="h-[calc(100vh-44px)] bg-white flex overflow-hidden w-full">
+    <div className="h-[calc(100vh-40px)] flex overflow-hidden w-full" style={{ background: '#050506' }}>
       
       <SessionSidebar
         sessions={sessions}
@@ -305,18 +310,21 @@ export default function CopilotPage() {
         projectId={selectedProjectId}
       />
 
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-white relative items-center w-full">
-        <div className="flex-shrink-0 h-[60px] border-b border-gray-100 bg-white/80 backdrop-blur-md flex items-center justify-between px-6 z-10 w-full">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-[10px] bg-indigo-600 flex items-center justify-center shadow-sm">
-              <Sparkles size={16} className="text-white" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <p className="text-[15px] font-semibold text-slate-900 leading-none">Niggex AI</p>
+      <div className="flex-1 flex flex-col h-full overflow-hidden relative items-center w-full" style={{ background: '#050506' }}>
+        <div className="flex-shrink-0 h-[60px] flex items-center justify-center px-6 z-10 w-full backdrop-blur-md"
+          style={{ background: 'rgba(5,5,6,0.7)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          <div className="flex items-center justify-between w-full max-w-5xl">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-[10px] flex items-center justify-center shadow-sm"
+                style={{ background: 'linear-gradient(135deg, #5E6AD2 0%, #a78bfa 100%)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                <Sparkles size={16} className="text-white" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <p className="text-[15px] font-semibold leading-none" style={{ color: '#EDEDEF' }}>Niggex AI</p>
+                </div>
               </div>
             </div>
-          </div>
 
           <div className="flex items-center gap-4">
             {loadingProjects ? (
@@ -329,6 +337,7 @@ export default function CopilotPage() {
               />
             )}
             <DeploymentBadge deployment={currentDeployment} />
+          </div>
           </div>
         </div>
 
@@ -343,21 +352,22 @@ export default function CopilotPage() {
           ref={scrollRef}
           onScroll={handleScroll}
           className="flex-1 overflow-y-auto w-full flex flex-col items-center"
-          style={{ scrollbarWidth: 'thin', scrollbarColor: '#CBD5E1 transparent' }}
+          style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}
         >
           <div className="w-full max-w-4xl px-4 flex flex-col h-full">
             {!hasMessages ? (
               <div className="flex-1 flex flex-col items-center justify-center pb-20 mt-20">
                 <div className="relative mb-8 animate-in fade-in zoom-in duration-500 delay-150 fill-mode-both">
-                  <div className="w-24 h-24 rounded-[32px] bg-gradient-to-br from-indigo-500 via-purple-500 to-indigo-600 flex items-center justify-center shadow-2xl shadow-indigo-500/20 ring-1 ring-white/20">
+                  <div className="w-24 h-24 rounded-[32px] flex items-center justify-center shadow-2xl"
+                    style={{ background: 'linear-gradient(135deg, #5E6AD2 0%, #a78bfa 100%)', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 40px rgba(94,106,210,0.3)' }}>
                     <Sparkles size={40} className="text-white fill-white/20" />
                   </div>
                 </div>
-                <h2 className="text-[28px] font-bold text-slate-900 mb-4 tracking-tight animate-in fade-in slide-in-from-bottom-4 duration-500 delay-300 fill-mode-both">How can I help you?</h2>
-                <div className="text-slate-500 text-[15px] text-center max-w-lg leading-relaxed flex flex-col gap-1 mb-10 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-500 fill-mode-both">
+                <h2 className="text-[28px] font-bold mb-4 tracking-tight animate-in fade-in slide-in-from-bottom-4 duration-500 delay-300 fill-mode-both" style={{ color: '#EDEDEF' }}>How can I help you?</h2>
+                <div className="text-[15px] text-center max-w-lg leading-relaxed flex flex-col gap-1 mb-10 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-500 fill-mode-both" style={{ color: '#8A8F98' }}>
                   <p>Understand your deployments. Diagnose failures.</p>
                   <p>Explore your infrastructure.</p>
-                  {!selectedProjectId && <span className="text-amber-600 font-medium mt-2 bg-amber-50 px-3 py-1 rounded-full w-max mx-auto">Please select a project first</span>}
+                  {!selectedProjectId && <span className="font-medium mt-2 px-3 py-1 rounded-full w-max mx-auto" style={{ color: '#fbbf24', background: 'rgba(245,158,11,0.15)' }}>Please select a project first</span>}
                 </div>
                 <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500 delay-700 fill-mode-both">
                   {selectedProjectId && <QuickActions onAction={handleSend} />}

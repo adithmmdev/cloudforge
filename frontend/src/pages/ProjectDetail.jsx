@@ -4,6 +4,7 @@ import {
   ExternalLink, Play, Loader2, ChevronRight, RefreshCw,
   AlertCircle, CheckCircle, XCircle
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import DeploymentGraph from '../components/DeploymentGraph.jsx';
 import TimelineTab from '../components/tabs/TimelineTab.jsx';
 import LogsTab from '../components/tabs/LogsTab.jsx';
@@ -16,60 +17,65 @@ import DeploymentReportTab from '../components/tabs/DeploymentReportTab.jsx';
 import AdvancedHealthTab from '../components/tabs/AdvancedHealthTab.jsx';
 import AutonomyDial from '../components/AutonomyDial.jsx';
 
+// ── Tab definitions (unchanged) ───────────────────────────────
 const TABS = [
-  { key: 'timeline',     label: 'Timeline' },
-  { key: 'reasoning',    label: 'Agent Reasoning' },
-  { key: 'disclosure',   label: 'Disclosure Ledger' },
-  { key: 'shadow',       label: 'Shadow Verification' },
-  { key: 'logs',         label: 'Logs' },
-  { key: 'metrics',      label: 'Metrics' },
-  { key: 'health',       label: 'Health Analytics' },
-  { key: 'services',     label: 'Service List' },
-  { key: 'report',       label: 'Deployment Report' },
+  { key: 'timeline',   label: 'Timeline' },
+  { key: 'reasoning',  label: 'Agent Reasoning' },
+  { key: 'disclosure', label: 'Disclosure Ledger' },
+  { key: 'shadow',     label: 'Shadow Verification' },
+  { key: 'logs',       label: 'Logs' },
+  { key: 'metrics',    label: 'Metrics' },
+  { key: 'health',     label: 'Health Analytics' },
+  { key: 'services',   label: 'Service List' },
+  { key: 'report',     label: 'Deployment Report' },
 ];
 
+// ── Dark status styles ────────────────────────────────────────
 const STATUS_STYLES = {
-  live:        'text-emerald-700 bg-emerald-50 border-emerald-200',
-  building:    'text-amber-700 bg-amber-50 border-amber-200',
-  failed:      'text-red-700 bg-red-50 border-red-200',
-  pending:     'text-gray-600 bg-gray-50 border-gray-200',
-  healing:     'text-purple-700 bg-purple-50 border-purple-200',
-  rolled_back: 'text-orange-700 bg-orange-50 border-orange-200',
-  deployed:    'text-emerald-700 bg-emerald-50 border-emerald-200',
+  live:        'text-emerald-400 bg-emerald-500/10 border-emerald-500/25',
+  building:    'text-amber-400 bg-amber-500/10 border-amber-500/25',
+  failed:      'text-rose-400 bg-rose-500/10 border-rose-500/25',
+  pending:     'text-slate-400 bg-white/[0.04] border-white/[0.10]',
+
+  healing:     'text-violet-400 bg-violet-500/10 border-violet-500/25',
+  rolled_back: 'text-orange-400 bg-orange-500/10 border-orange-500/25',
+  deployed:    'text-emerald-400 bg-emerald-500/10 border-emerald-500/25',
 };
 
+// ─────────────────────────────────────────────────────────────
 export default function ProjectDetail() {
+  // ── All state (completely unchanged) ─────────────────────
   const { id: projectId } = useParams();
-  const [project, setProject] = useState(null);
-  const [deployment, setDeployment] = useState(null);
-  const [activeTab, setActiveTab] = useState('timeline');
-  const [loading, setLoading] = useState(true);
-  const [deploying, setDeploying] = useState(false);
+  const [project, setProject]           = useState(null);
+  const [deployment, setDeployment]     = useState(null);
+  const [activeTab, setActiveTab]       = useState('timeline');
+  const [loading, setLoading]           = useState(true);
+  const [deploying, setDeploying]       = useState(false);
   const [autonomyMode, setAutonomyMode] = useState('approve_each');
 
-  // WS state
-  const [stageEvents, setStageEvents] = useState([]);
-  const [logs, setLogs] = useState([]);
-  const [liveMetrics, setLiveMetrics] = useState([]);
-  const [diagnosis, setDiagnosis] = useState(null);
+  // WS state (completely unchanged)
+  const [stageEvents, setStageEvents]             = useState([]);
+  const [logs, setLogs]                           = useState([]);
+  const [liveMetrics, setLiveMetrics]             = useState([]);
+  const [diagnosis, setDiagnosis]                 = useState(null);
+  const [diagnoses, setDiagnoses]                 = useState([]);
   const [remediationAction, setRemediationAction] = useState(null);
-  const [disclosures, setDisclosures] = useState([]);
-  const [shadowTests, setShadowTests] = useState([]);
-  const [shadowState, setShadowState] = useState('idle');
-  const wsRef = useRef(null);
-  const reconnectRef = useRef(null);
+  const [disclosures, setDisclosures]             = useState([]);
+  const [shadowTests, setShadowTests]             = useState([]);
+  const [shadowState, setShadowState]             = useState('idle');
+  const wsRef         = useRef(null);
+  const reconnectRef  = useRef(null);
   const deploymentIdRef = useRef(null);
 
-  // Fetch project & latest deployment
+  // ── Fetch project & latest deployment (completely unchanged) ──
   const fetchProject = useCallback(async () => {
     try {
-      const res = await fetch(`/api/projects`, { cache: 'no-store' });
+      const res  = await fetch(`/api/projects`, { cache: 'no-store' });
       const data = await res.json();
       const proj = Array.isArray(data) ? data.find(p => String(p.id) === String(projectId)) : null;
       if (proj) {
         setProject(proj);
         if (proj.last_deployment_id) {
-          // Fetch the full deployment object
           const depRes = await fetch(`/api/deployments/${proj.last_deployment_id}`, { cache: 'no-store' });
           if (depRes.ok) {
             const dep = await depRes.json();
@@ -94,7 +100,7 @@ export default function ProjectDetail() {
     fetchAutonomy();
   }, [fetchProject, fetchAutonomy]);
 
-  // WebSocket connection
+  // ── WebSocket (completely unchanged) ──────────────────────
   const connectWS = useCallback((depId) => {
     if (wsRef.current) wsRef.current.close();
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -111,10 +117,7 @@ export default function ProjectDetail() {
             setStageEvents(prev => [...prev, { ...payload, timestamp: new Date().toISOString() }]);
             setDeployment(prev => prev ? { ...prev, status: payload.stage === 'live' ? 'live' : prev.status } : prev);
             if (payload.stage === 'shadow_testing') setShadowState('building');
-            if (payload.stage === 'live') {
-              setActiveTab('timeline');
-              fetchProject();
-            }
+            if (payload.stage === 'live') { setActiveTab('timeline'); fetchProject(); }
             break;
           case 'build_log':
           case 'container_log':
@@ -141,7 +144,6 @@ export default function ProjectDetail() {
               else copy.push(payload);
               return copy;
             });
-            
             if (payload.passed) setActiveTab('shadow');
             break;
           case 'awaiting_approval':
@@ -166,7 +168,7 @@ export default function ProjectDetail() {
             break;
           case 'deployment_failed':
             setDeployment(prev => prev ? { ...prev, status: payload.rolled_back ? 'rolled_back' : 'failed' } : prev);
-            setShadowState(prev => prev === 'building' || prev === 'testing' ? 'failed' : prev);
+            setShadowState(prev => (prev === 'building' || prev === 'testing') ? 'failed' : prev);
             break;
           case 'deployment_resumed':
             if (payload.deployment_id === depId) {
@@ -186,32 +188,31 @@ export default function ProjectDetail() {
     };
   }, [fetchProject]);
 
-  // Hydrate historical data when a deployment is loaded (for failed/live deployments visited after the fact)
+  // ── Hydrate historical data (completely unchanged) ─────────
   useEffect(() => {
     if (!deployment?.id) return;
     const depId = deployment.id;
     (async () => {
       try {
         const [diagData, discData, shadowData, stageData, remActData] = await Promise.all([
-          fetch(`/api/deployments/${depId}/diagnoses`, { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
-          fetch(`/api/deployments/${depId}/disclosures`, { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
-          fetch(`/api/deployments/${depId}/shadow-tests`, { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
-          fetch(`/api/deployments/${depId}/stage-events`, { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
-          fetch(`/api/deployments/${depId}/remediation-actions`, { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
+          fetch(`/api/deployments/${depId}/diagnoses`,            { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
+          fetch(`/api/deployments/${depId}/disclosures`,          { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
+          fetch(`/api/deployments/${depId}/shadow-tests`,         { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
+          fetch(`/api/deployments/${depId}/stage-events`,         { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
+          fetch(`/api/deployments/${depId}/remediation-actions`,  { cache: 'no-store' }).then(r => r.ok ? r.json() : []),
         ]);
-        // Only hydrate if no live data yet
         if (diagData.length > 0) {
           setDiagnoses(prev => prev.length === 0 ? diagData : prev);
           setDiagnosis(diagData[diagData.length - 1]);
         }
-        if (discData.length > 0) setDisclosures(prev => prev.length === 0 ? discData : prev);
+        if (discData.length > 0)   setDisclosures(prev => prev.length === 0 ? discData : prev);
         if (shadowData.length > 0) {
           setShadowTests(prev => prev.length === 0 ? shadowData : prev);
           setShadowState(shadowData.every(t => t.passed) ? 'passed' : 'failed');
         }
         if (stageData.length > 0) {
           const nonLogEvents = stageData.filter(e => e.stage !== 'log');
-          const logEvents = stageData.filter(e => e.stage === 'log');
+          const logEvents    = stageData.filter(e => e.stage === 'log');
           setStageEvents(prev => prev.length === 0 ? nonLogEvents : prev);
           setLogs(prev => prev.length === 0 ? logEvents.map(e => {
             const detail = e.detail || '';
@@ -222,10 +223,9 @@ export default function ProjectDetail() {
             return { text: detail, service: 'app', timestamp: e.created_at };
           }) : prev);
         }
-        // Hydrate remediation action for approve/reject buttons
         if (remActData.length > 0) {
           const pending = remActData.find(a => a.status === 'awaiting_approval');
-          const latest = remActData[remActData.length - 1];
+          const latest  = remActData[remActData.length - 1];
           setRemediationAction(prev => prev || pending || latest || null);
         }
       } catch {}
@@ -238,11 +238,12 @@ export default function ProjectDetail() {
       connectWS(deployment.id);
     }
     return () => {
-      if (wsRef.current) wsRef.current.close();
+      if (wsRef.current)        wsRef.current.close();
       if (reconnectRef.current) clearTimeout(reconnectRef.current);
     };
   }, [deployment?.id, connectWS]);
 
+  // ── Action handlers (completely unchanged) ─────────────────
   const handleDeploy = async () => {
     setDeploying(true);
     setStageEvents([]);
@@ -254,7 +255,7 @@ export default function ProjectDetail() {
     setShadowState('idle');
     setDisclosures([]);
     try {
-      const res = await fetch(`/api/projects/${projectId}/deploy`, { method: 'POST' });
+      const res  = await fetch(`/api/projects/${projectId}/deploy`, { method: 'POST' });
       const data = await res.json();
       if (res.ok) {
         setDeployment({ id: data.deployment_id, status: 'pending' });
@@ -273,13 +274,10 @@ export default function ProjectDetail() {
     setShadowState('idle');
     try {
       const res = await fetch(`/api/deployments/${deployment.id}/resume`, { method: 'POST' });
-      if (res.ok) {
-        setDeployment(prev => ({ ...prev, status: 'pending' }));
-      }
+      if (res.ok) { setDeployment(prev => ({ ...prev, status: 'pending' })); }
     } catch {}
     setDeploying(false);
   };
-
 
   const handleAutonomyChange = async (mode) => {
     setAutonomyMode(mode);
@@ -290,62 +288,125 @@ export default function ProjectDetail() {
     });
   };
 
-  const status = deployment?.status || 'none';
+  // ── Derived state (completely unchanged) ──────────────────
+  const status      = deployment?.status || 'none';
   const statusStyle = STATUS_STYLES[status] || STATUS_STYLES.pending;
-  const isCompose = project?.framework === 'mern';
-  const isActive = ['pending', 'building', 'deploying', 'health_check', 'healing'].includes(status);
+  const isCompose   = project?.framework === 'mern';
+  const isActive    = ['pending', 'building', 'deploying', 'health_check', 'healing'].includes(status);
 
+  // ── Loading state ─────────────────────────────────────────
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
+      <div
+        className="flex items-center justify-center h-64"
+        style={{ color: '#8A8F98' }}
+      >
+        <Loader2 className="w-5 h-5 animate-spin" />
       </div>
     );
   }
 
+  // ── 404 state ─────────────────────────────────────────────
   if (!project) {
     return (
-      <div className="p-6">
-        <div className="flex items-center gap-2 text-red-600">
+      <div className="p-6" style={{ color: '#8A8F98' }}>
+        <div className="flex items-center gap-2" style={{ color: '#f43f5e' }}>
           <AlertCircle className="w-5 h-5" />
-          <span>Project #{projectId} not found</span>
+          <span className="text-sm">Project #{projectId} not found</span>
         </div>
-        <Link to="/" className="mt-3 inline-block text-[12px] text-indigo-600 hover:underline">← Back to Dashboard</Link>
+        <Link
+          to="/"
+          className="mt-3 inline-block text-xs"
+          style={{ color: '#5E6AD2' }}
+        >
+          ← Back to Dashboard
+        </Link>
       </div>
     );
   }
 
+  // ─────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-[calc(100vh-44px)]">
-      {/* Project Header */}
-      <div className="px-6 py-3 border-b border-gray-200 bg-white flex items-center gap-4 flex-shrink-0">
-        <Link to="/" className="text-[12px] text-gray-400 hover:text-gray-600 flex items-center gap-1">
+    <motion.div
+      className="flex flex-col"
+      style={{ height: 'calc(100vh - 40px)' }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+    >
+      {/* ── Project Header ── */}
+      <div
+        className="px-5 py-2.5 flex items-center gap-4 flex-shrink-0"
+        style={{
+          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          background: 'rgba(10,10,12,0.8)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+        }}
+      >
+        <Link
+          to="/"
+          className="text-xs flex items-center gap-1 transition-colors duration-150"
+          style={{ color: '#8A8F98' }}
+          onMouseEnter={e => e.currentTarget.style.color = '#EDEDEF'}
+          onMouseLeave={e => e.currentTarget.style.color = '#8A8F98'}
+        >
           Dashboard <ChevronRight className="w-3 h-3" />
         </Link>
-        <span className="text-[13px] font-semibold text-gray-900">{project.name}</span>
-        <span className="px-2 py-0.5 rounded text-[11px] font-mono font-medium border bg-gray-50 text-gray-600 border-gray-200">
+
+        <span className="text-sm font-semibold" style={{ color: '#EDEDEF', letterSpacing: '-0.01em' }}>
+          {project.name}
+        </span>
+
+        <span
+          className="px-2 py-0.5 rounded text-xs font-mono font-semibold border"
+          style={{
+            background: 'rgba(255,255,255,0.05)',
+            borderColor: 'rgba(255,255,255,0.09)',
+            color: '#8A8F98',
+          }}
+        >
           {project.framework?.toUpperCase()}
         </span>
+
         {deployment && (
-          <span className={`px-2 py-0.5 rounded text-[11px] font-medium border ${statusStyle} flex items-center gap-1`}>
+          <span
+            className={`px-2 py-0.5 rounded text-xs font-semibold border flex items-center gap-1.5 ${statusStyle}`}
+          >
             {isActive && <Loader2 className="w-3 h-3 animate-spin" />}
             {status}
           </span>
         )}
+
         <div className="ml-auto flex items-center gap-3">
           {deployment?.app_url && status === 'live' && (
-            <a href={deployment.app_url} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 text-[12px] text-emerald-600 hover:text-emerald-800 font-medium font-mono">
+            <a
+              href={deployment.app_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs font-mono font-medium transition-colors duration-150"
+              style={{ color: '#4ade80' }}
+              onMouseEnter={e => e.currentTarget.style.color = '#86efac'}
+              onMouseLeave={e => e.currentTarget.style.color = '#4ade80'}
+            >
               {deployment.app_url} <ExternalLink className="w-3 h-3" />
             </a>
           )}
+
           <AutonomyDial projectId={projectId} currentMode={autonomyMode} onChange={handleAutonomyChange} />
-          
+
           {(status === 'failed' || status === 'cancelled' || status === 'rolled_back' || status === 'remediation_proposed') && (
             <button
               onClick={handleResume}
               disabled={deploying || isActive}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded hover:bg-indigo-100 disabled:opacity-50 transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded border transition-all duration-150 disabled:opacity-40"
+              style={{
+                color: '#5E6AD2',
+                background: 'rgba(94,106,210,0.1)',
+                borderColor: 'rgba(94,106,210,0.25)',
+              }}
+              onMouseEnter={e => { if (!e.currentTarget.disabled) e.currentTarget.style.background = 'rgba(94,106,210,0.18)'; }}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(94,106,210,0.1)'}
             >
               <RefreshCw className="w-3.5 h-3.5" />
               Resume
@@ -355,7 +416,14 @@ export default function ProjectDetail() {
           <button
             onClick={handleDeploy}
             disabled={deploying || isActive}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 disabled:opacity-50 transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white rounded border transition-all duration-150 disabled:opacity-40"
+            style={{
+              background: '#5E6AD2',
+              borderColor: 'rgba(94,106,210,0.5)',
+              boxShadow: '0 0 12px rgba(94,106,210,0.25)',
+            }}
+            onMouseEnter={e => { if (!e.currentTarget.disabled) { e.currentTarget.style.background = '#6872D9'; e.currentTarget.style.boxShadow = '0 0 20px rgba(94,106,210,0.4)'; } }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#5E6AD2'; e.currentTarget.style.boxShadow = '0 0 12px rgba(94,106,210,0.25)'; }}
           >
             {deploying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
             {deploying ? 'Deploying...' : 'Deploy'}
@@ -363,8 +431,15 @@ export default function ProjectDetail() {
         </div>
       </div>
 
-      {/* Topology Graph */}
-      <div className="flex-shrink-0 border-b border-gray-200 bg-white" style={{ height: '220px' }}>
+      {/* ── Topology Graph ── */}
+      <div
+        className="flex-shrink-0"
+        style={{
+          height: '210px',
+          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          background: 'rgba(2,2,3,0.6)',
+        }}
+      >
         <DeploymentGraph
           deployment={deployment}
           services={deployment?.services || []}
@@ -374,25 +449,37 @@ export default function ProjectDetail() {
         />
       </div>
 
-      {/* Tab Bar */}
-      <div className="flex-shrink-0 border-b border-gray-200 bg-white px-6 flex items-end overflow-x-auto">
+      {/* ── Tab Bar ── */}
+      <div
+        className="flex-shrink-0 px-5 flex items-end overflow-x-auto"
+        style={{
+          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          background: 'rgba(5,5,6,0.9)',
+          scrollbarWidth: 'none',
+        }}
+      >
         {TABS.map(tab => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`px-3 py-2.5 text-[12px] font-medium whitespace-nowrap border-b-2 transition-all ${
-              activeTab === tab.key
-                ? 'border-indigo-500 text-indigo-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
+            className="px-3 py-2.5 text-xs font-semibold whitespace-nowrap border-b-2 transition-all duration-150"
+            style={{
+              borderBottomColor: activeTab === tab.key ? '#5E6AD2' : 'transparent',
+              color: activeTab === tab.key ? '#5E6AD2' : '#8A8F98',
+            }}
+            onMouseEnter={e => { if (activeTab !== tab.key) e.currentTarget.style.color = '#EDEDEF'; }}
+            onMouseLeave={e => { if (activeTab !== tab.key) e.currentTarget.style.color = '#8A8F98'; }}
           >
             {tab.label}
           </button>
         ))}
       </div>
 
-      {/* Tab Content */}
-      <div className="flex-1 overflow-auto">
+      {/* ── Tab Content ── */}
+      <div
+        className="flex-1 overflow-auto"
+        style={{ background: 'rgba(2,2,3,0.3)' }}
+      >
         {activeTab === 'timeline'   && <TimelineTab events={stageEvents} currentStage={['failed', 'rolled_back', 'cancelled', 'live'].includes(deployment?.status) ? deployment.status : (stageEvents.length > 0 ? stageEvents[stageEvents.length - 1].stage : status)} deployment={deployment} />}
         {activeTab === 'reasoning'  && (
           <AgentReasoningTab
@@ -418,6 +505,6 @@ export default function ProjectDetail() {
         {activeTab === 'services'   && <ServiceListTab services={deployment?.services || []} />}
         {activeTab === 'report'     && <DeploymentReportTab deploymentId={deployment?.id} deploymentStatus={deployment?.status} />}
       </div>
-    </div>
+    </motion.div>
   );
 }

@@ -1,97 +1,205 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Database, Cpu, Bot, Shield, ExternalLink, CheckCircle, XCircle } from 'lucide-react';
+import { motion } from 'framer-motion';
 
+// ── Dark InfoCard ─────────────────────────────────────────────
 function InfoCard({ icon: Icon, title, value, mono = false, status }) {
   return (
-    <div className="p-4 border border-gray-200 rounded bg-white">
+    <div
+      className="p-4 rounded-lg"
+      style={{
+        background: 'rgba(255,255,255,0.03)',
+        border: '1px solid rgba(255,255,255,0.08)',
+      }}
+    >
       <div className="flex items-center gap-2 mb-2">
-        <Icon className="w-4 h-4 text-gray-400" />
-        <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">{title}</span>
-        {status === 'ok' && <CheckCircle className="w-3.5 h-3.5 text-emerald-500 ml-auto" />}
-        {status === 'error' && <XCircle className="w-3.5 h-3.5 text-red-500 ml-auto" />}
+        <Icon className="w-3.5 h-3.5" style={{ color: '#8A8F98' }} />
+        <span
+          className="text-xs font-semibold uppercase tracking-[0.08em]"
+          style={{ color: '#8A8F98' }}
+        >
+          {title}
+        </span>
+        {status === 'ok'    && <CheckCircle className="w-3 h-3 ml-auto" style={{ color: '#22c55e' }} />}
+        {status === 'error' && <XCircle     className="w-3 h-3 ml-auto" style={{ color: '#f43f5e' }} />}
       </div>
-      <p className={`text-[13px] text-gray-900 ${mono ? 'font-mono' : ''}`}>{value}</p>
+      <p
+        className={`text-sm font-medium ${mono ? 'font-mono' : ''}`}
+        style={{ color: '#EDEDEF' }}
+      >
+        {value}
+      </p>
     </div>
   );
 }
 
+// ── Stagger animation ─────────────────────────────────────────
+const stagger = {
+  hidden:  {},
+  visible: { transition: { staggerChildren: 0.06, delayChildren: 0.05 } },
+};
+const fadeUp = {
+  hidden:  { opacity: 0, y: 10 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] } },
+};
+
+// ─────────────────────────────────────────────────────────────
 export default function SettingsPage() {
+  // ── Data fetching (completely unchanged) ──────────────────
   const [health, setHealth] = useState(null);
 
   useEffect(() => {
-    fetch('/api/health').then(r => r.ok ? r.json() : null).then(setHealth).catch(() => {});
+    fetch('/api/health')
+      .then(r => r.ok ? r.json() : null)
+      .then(setHealth)
+      .catch(() => {});
   }, []);
 
+  // ─────────────────────────────────────────────────────────
   return (
-    <div className="p-6">
+    <motion.div
+      className="p-6"
+      initial="hidden"
+      animate="visible"
+      variants={stagger}
+    >
       <div className="max-w-3xl">
-        <div className="mb-6">
-          <h1 className="text-[20px] font-semibold text-gray-900">Settings</h1>
-          <p className="text-[13px] text-gray-500 mt-0.5">Platform configuration and environment overview</p>
-        </div>
 
-        {/* Platform Status */}
-          <div className="bg-white rounded border border-gray-200 p-5 mb-8">
-            <h2 className="text-[13px] font-semibold text-gray-900 mb-3">Platform Info</h2>
-            <div className="grid grid-cols-3 gap-3">
-              <InfoCard icon={Database} title="Database" value="PostgreSQL 16" status={health ? 'ok' : 'error'} />
-              <InfoCard icon={Cpu} title="Backend" value="FastAPI + Uvicorn" status={health ? 'ok' : 'error'} />
-              <InfoCard icon={Bot} title="Cloud LLM" value="Moonshot AI (Kimi)" />
-            </div>
+        {/* ── Header ── */}
+        <motion.div className="mb-8" variants={fadeUp}>
+          <p className="text-xs font-semibold uppercase tracking-[0.09em] mb-2" style={{ color: '#8A8F98' }}>
+            CloudForge / Configuration
+          </p>
+          <h1
+            className="text-2xl font-bold tracking-tight mb-2"
+            style={{ color: '#EDEDEF', letterSpacing: '-0.02em' }}
+          >
+            Settings
+          </h1>
+          <p className="text-sm" style={{ color: '#8A8F98', lineHeight: '1.6' }}>
+            Platform configuration and environment overview
+          </p>
+        </motion.div>
+
+        {/* ── Platform Status ── */}
+        <motion.div
+          className="rounded-lg p-5 mb-8"
+          style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.08)' }}
+          variants={fadeUp}
+        >
+          <h2
+            className="text-xs font-semibold uppercase tracking-[0.08em] mb-4"
+            style={{ color: '#8A8F98' }}
+          >
+            Platform Info
+          </h2>
+          <div className="grid grid-cols-3 gap-3">
+            <InfoCard icon={Database} title="Database" value="PostgreSQL 16"     status={health ? 'ok' : 'error'} />
+            <InfoCard icon={Cpu}      title="Backend"  value="FastAPI + Uvicorn" status={health ? 'ok' : 'error'} />
+            <InfoCard icon={Bot}      title="Cloud LLM" value="Moonshot AI (Kimi)" />
           </div>
+        </motion.div>
 
-        {/* LLM Config */}
-        <div className="mb-8">
-          <h2 className="text-[13px] font-semibold text-gray-700 mb-3">AI / LLM Configuration</h2>
-          <div className="border border-gray-200 rounded overflow-hidden">
-            <table className="w-full text-[13px]">
+        {/* ── LLM Config ── */}
+        <motion.div className="mb-8" variants={fadeUp}>
+          <h2
+            className="text-xs font-semibold uppercase tracking-[0.08em] mb-4"
+            style={{ color: '#8A8F98' }}
+          >
+            AI / LLM Configuration
+          </h2>
+          <div
+            className="rounded-lg overflow-hidden"
+            style={{ border: '1px solid rgba(255,255,255,0.08)' }}
+          >
+            <table className="w-full text-xs">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-4 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">Variable</th>
-                  <th className="px-4 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">Value</th>
-                  <th className="px-4 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+                  <th className="px-4 py-2.5 text-left font-semibold uppercase tracking-[0.07em]" style={{ color: '#8A8F98' }}>Variable</th>
+                  <th className="px-4 py-2.5 text-left font-semibold uppercase tracking-[0.07em]" style={{ color: '#8A8F98' }}>Value</th>
+                  <th className="px-4 py-2.5 text-left font-semibold uppercase tracking-[0.07em]" style={{ color: '#8A8F98' }}>Description</th>
                 </tr>
               </thead>
               <tbody>
                 {[
-                  ['OLLAMA_HOST', 'http://localhost:11434', 'Local Ollama inference server'],
-                  ['OLLAMA_MODEL', 'qwen2.5-coder:7b-instruct', 'Primary local model'],
-                  ['LOCAL_CONFIDENCE_THRESHOLD', '0.75', 'Min confidence before cloud escalation'],
-                  ['CLOUD_LLM_PROVIDER', 'anthropic | glm | nvidia_nim', 'Active cloud LLM provider'],
+                  ['OLLAMA_HOST',               'http://localhost:11434',       'Local Ollama inference server'],
+                  ['OLLAMA_MODEL',              'qwen2.5-coder:7b-instruct',   'Primary local model'],
+                  ['LOCAL_CONFIDENCE_THRESHOLD','0.75',                         'Min confidence before cloud escalation'],
+                  ['CLOUD_LLM_PROVIDER',        'anthropic | glm | nvidia_nim', 'Active cloud LLM provider'],
                 ].map(([key, val, desc]) => (
-                  <tr key={key} className="border-b border-gray-100">
-                    <td className="px-4 py-3 font-mono text-[12px] text-gray-700">{key}</td>
-                    <td className="px-4 py-3 font-mono text-[12px] text-indigo-600">{val}</td>
-                    <td className="px-4 py-3 text-[12px] text-gray-500">{desc}</td>
+                  <tr
+                    key={key}
+                    style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
+                  >
+                    <td
+                      className="px-4 py-3 font-mono font-medium"
+                      style={{ color: '#EDEDEF' }}
+                    >
+                      {key}
+                    </td>
+                    <td
+                      className="px-4 py-3 font-mono"
+                      style={{ color: '#5E6AD2' }}
+                    >
+                      {val}
+                    </td>
+                    <td
+                      className="px-4 py-3"
+                      style={{ color: '#8A8F98' }}
+                    >
+                      {desc}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <p className="mt-2 text-[11px] text-gray-400">Configure these values in your <span className="font-mono">.env</span> file and restart the backend.</p>
-        </div>
+          <p className="mt-2 text-xs" style={{ color: '#8A8F98' }}>
+            Configure these values in your <span className="font-mono" style={{ color: '#EDEDEF' }}>.env</span> file and restart the backend.
+          </p>
+        </motion.div>
 
-        {/* AWS */}
-        <div className="mb-8">
-          <h2 className="text-[13px] font-semibold text-gray-700 mb-3">AWS Infrastructure</h2>
-          <div className="p-4 border border-gray-200 rounded bg-gray-50 flex items-center justify-between">
+        {/* ── AWS ── */}
+        <motion.div className="mb-8" variants={fadeUp}>
+          <h2
+            className="text-xs font-semibold uppercase tracking-[0.08em] mb-4"
+            style={{ color: '#8A8F98' }}
+          >
+            AWS Infrastructure
+          </h2>
+          <div
+            className="p-4 rounded-lg flex items-center justify-between"
+            style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.08)' }}
+          >
             <div>
-              <p className="text-[13px] font-medium text-gray-700">AWS Setup Wizard</p>
-              <p className="text-[12px] text-gray-500 mt-0.5">Auto-configure Security Groups, Key Pairs, AMI detection</p>
+              <p className="text-sm font-semibold" style={{ color: '#EDEDEF' }}>AWS Setup Wizard</p>
+              <p className="text-xs mt-0.5" style={{ color: '#8A8F98' }}>
+                Auto-configure Security Groups, Key Pairs, AMI detection
+              </p>
             </div>
             <Link
               to="/aws-setup"
-              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white rounded-md border transition-all duration-150"
+              style={{
+                background: '#5E6AD2',
+                borderColor: 'rgba(94,106,210,0.4)',
+                boxShadow: '0 0 12px rgba(94,106,210,0.2)',
+              }}
             >
               <ExternalLink className="w-3.5 h-3.5" /> Open Wizard
             </Link>
           </div>
-        </div>
+        </motion.div>
 
-        {/* Security Info */}
-        <div className="mb-8">
-          <h2 className="text-[13px] font-semibold text-gray-700 mb-3">Security Controls</h2>
+        {/* ── Security ── */}
+        <motion.div className="mb-8" variants={fadeUp}>
+          <h2
+            className="text-xs font-semibold uppercase tracking-[0.08em] mb-4"
+            style={{ color: '#8A8F98' }}
+          >
+            Security Controls
+          </h2>
           <div className="space-y-2">
             {[
               'Docker build always uses --network=none (prevents exfiltration during build)',
@@ -102,19 +210,26 @@ export default function SettingsPage() {
               'Runtime containers: --memory=256m --cpus=0.5 --pids-limit=100',
               'Remediation actions restricted to 7 safe grammar operations (no shell injection possible)',
             ].map((item, i) => (
-              <div key={i} className="flex items-start gap-2 text-[12px] text-gray-600">
-                <Shield className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />
+              <div key={i} className="flex items-start gap-2.5 text-xs" style={{ color: '#8A8F98' }}>
+                <Shield className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: '#22c55e' }} />
                 {item}
               </div>
             ))}
           </div>
-        </div>
+        </motion.div>
 
-        {/* Version */}
-        <div className="pt-4 border-t border-gray-200">
-          <p className="text-[11px] text-gray-400 font-mono">CloudForge v4.0 · Capstone · FastAPI 0.115.0 · React 18.2.0 · PostgreSQL 16</p>
-        </div>
+        {/* ── Version ── */}
+        <motion.div
+          className="pt-4"
+          style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}
+          variants={fadeUp}
+        >
+          <p className="text-xs font-mono" style={{ color: '#8A8F98' }}>
+            CloudForge v4.0 · Capstone · FastAPI 0.115.0 · React 18.2.0 · PostgreSQL 16
+          </p>
+        </motion.div>
+
       </div>
-    </div>
+    </motion.div>
   );
 }

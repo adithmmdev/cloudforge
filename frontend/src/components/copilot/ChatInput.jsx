@@ -33,9 +33,17 @@ export default function ChatInput({ onSend, isStreaming, onCancel }) {
 
   return (
     <div className="px-4 py-4 md:px-8 w-full max-w-4xl mx-auto">
-      <div className={`relative flex items-end gap-2 bg-white rounded-[24px] shadow-sm transition-all duration-300 border ${
-        overLimit ? 'border-red-300 ring-4 ring-red-50' : 'border-gray-200 focus-within:border-indigo-400 focus-within:ring-4 focus-within:ring-indigo-50/50 hover:border-gray-300 hover:shadow-md'
-      }`}>
+      <div
+        className="relative flex items-end gap-2 rounded-[24px] shadow-lg transition-all duration-300"
+        style={{
+          background: 'rgba(255,255,255,0.03)',
+          border: `1px solid ${overLimit ? '#f43f5e' : 'rgba(255,255,255,0.1)'}`,
+          boxShadow: overLimit ? '0 0 0 4px rgba(244,63,94,0.1)' : '0 4px 20px rgba(0,0,0,0.4)',
+          backdropFilter: 'blur(10px)',
+        }}
+        onMouseEnter={e => { if(!overLimit) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)' }}
+        onMouseLeave={e => { if(!overLimit) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)' }}
+      >
         <textarea
           ref={textareaRef}
           value={value}
@@ -45,37 +53,45 @@ export default function ChatInput({ onSend, isStreaming, onCancel }) {
           rows={1}
           maxLength={4000}
           disabled={isStreaming}
-          className="flex-1 resize-none bg-transparent pl-5 pr-4 py-4 text-[15px] text-slate-800 placeholder-gray-400 focus:outline-none disabled:opacity-60 min-h-[56px] max-h-[160px] leading-relaxed"
-          style={{ scrollbarWidth: 'none' }}
+          className="flex-1 resize-none bg-transparent pl-5 pr-4 py-4 text-[15px] focus:outline-none disabled:opacity-60 min-h-[56px] max-h-[160px] leading-relaxed"
+          style={{ scrollbarWidth: 'none', color: '#EDEDEF' }}
         />
 
         <div className="flex items-center gap-2 pr-3 pb-3 flex-shrink-0">
           {charCount > 3000 && (
-            <span className={`text-xs font-mono ${overLimit ? 'text-red-500' : 'text-gray-400'}`}>
+            <span className="text-xs font-mono" style={{ color: overLimit ? '#f43f5e' : '#8A8F98' }}>
               {charCount}/4000
             </span>
           )}
           {isStreaming ? (
             <button
               onClick={onCancel}
-              className="w-9 h-9 rounded-full bg-slate-800 hover:bg-slate-900 flex items-center justify-center transition-all duration-200 shadow shadow-slate-900/10 active:scale-95"
+              className="w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 active:scale-95"
+              style={{ background: '#f43f5e', color: '#fff' }}
               title="Stop generation"
             >
-              <Square size={14} className="text-white fill-white" />
+              <Square size={14} className="fill-current" />
             </button>
           ) : (
             <button
               onClick={handleSend}
               disabled={!value.trim() || overLimit}
-              className="w-9 h-9 rounded-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-100 disabled:cursor-not-allowed flex items-center justify-center transition-all duration-200 shadow shadow-indigo-600/20 active:scale-95 group"
+              className="w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 active:scale-95 group disabled:cursor-not-allowed"
+              style={{
+                background: !value.trim() || overLimit ? 'rgba(255,255,255,0.05)' : '#5E6AD2',
+                color: !value.trim() || overLimit ? 'rgba(255,255,255,0.3)' : '#fff',
+                boxShadow: !value.trim() || overLimit ? 'none' : '0 2px 10px rgba(94,106,210,0.3)'
+              }}
+              onMouseEnter={e => { if(value.trim() && !overLimit) e.currentTarget.style.background = '#6872D9' }}
+              onMouseLeave={e => { if(value.trim() && !overLimit) e.currentTarget.style.background = '#5E6AD2' }}
               title="Send (Enter)"
             >
-              <ArrowUp size={18} className={`transition-colors ${value.trim() && !overLimit ? 'text-white' : 'text-gray-300'}`} />
+              <ArrowUp size={18} />
             </button>
           )}
         </div>
       </div>
-      <div className="flex items-center justify-center gap-2 mt-3 text-[11px] text-gray-400 font-medium tracking-wide">
+      <div className="flex items-center justify-center gap-2 mt-3 text-[11px] font-medium tracking-wide" style={{ color: '#8A8F98' }}>
         <span>CloudForge Copilot can make mistakes. Verify critical deployment decisions.</span>
       </div>
     </div>

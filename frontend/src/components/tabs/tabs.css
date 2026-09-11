@@ -1,0 +1,195 @@
+/* ============================================================
+   Shared dark tab panel styles — applies inside project detail
+   tab content areas
+   ============================================================ */
+
+/* ── Tab page wrapper ────────────────────────────────────── */
+.tab-page {
+  padding: 24px;
+  color: #EDEDEF;
+  min-height: 100%;
+}
+
+/* ── Tab section heading ─────────────────────────────────── */
+.tab-heading {
+  font-size: 13px;
+  font-weight: 650;
+  color: #EDEDEF;
+  margin-bottom: 16px;
+  letter-spacing: -0.01em;
+}
+
+.tab-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #8A8F98;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 6px;
+}
+
+/* ── Dark panel (reusable in tabs) ──────────────────────── */
+.tab-panel {
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.tab-panel-head {
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.tab-panel-body {
+  padding: 14px 18px;
+}
+
+/* ── Dark table ─────────────────────────────────────────── */
+.tab-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.tab-table th {
+  text-align: left;
+  padding: 10px 16px;
+  background: rgba(255,255,255,0.02);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  color: #8A8F98;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.tab-table td {
+  padding: 11px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  color: #8A8F98;
+  vertical-align: middle;
+}
+
+.tab-table tbody tr:hover td {
+  background: rgba(255,255,255,0.02);
+}
+
+.tab-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* ── Dark code / mono block ─────────────────────────────── */
+.tab-mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #EDEDEF;
+}
+
+/* ── Dark badge ─────────────────────────────────────────── */
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.tab-badge--live    { color: #4ade80; background: rgba(34,197,94,0.1);   border-color: rgba(34,197,94,0.2); }
+.tab-badge--fail    { color: #fb7185; background: rgba(244,63,94,0.1);   border-color: rgba(244,63,94,0.2); }
+.tab-badge--warn    { color: #fbbf24; background: rgba(245,158,11,0.1);  border-color: rgba(245,158,11,0.2);}
+.tab-badge--info    { color: #38bdf8; background: rgba(56,189,248,0.1);  border-color: rgba(56,189,248,0.2);}
+.tab-badge--neutral { color: #8A8F98; background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.08);}
+.tab-badge--accent  { color: #818cf8; background: rgba(94,106,210,0.1);  border-color: rgba(94,106,210,0.2);}
+
+/* ── Timeline connector line ────────────────────────────── */
+.timeline-line {
+  position: absolute;
+  left: 11px;
+  top: 24px;
+  bottom: -8px;
+  width: 1px;
+  background: rgba(255,255,255,0.07);
+}
+
+/* ── Dark empty state ────────────────────────────────────── */
+.tab-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  color: #8A8F98;
+  text-align: center;
+  gap: 10px;
+}
+
+.tab-empty strong {
+  color: #EDEDEF;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tab-empty p {
+  font-size: 12px;
+  max-width: 380px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ── Approve / reject buttons ───────────────────────────── */
+.tab-btn-approve {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: rgba(34,197,94,0.12);
+  border: 1px solid rgba(34,197,94,0.25);
+  border-radius: 6px;
+  color: #4ade80;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.tab-btn-approve:hover:not(:disabled) {
+  background: rgba(34,197,94,0.2);
+  border-color: rgba(34,197,94,0.4);
+}
+
+.tab-btn-reject {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: rgba(244,63,94,0.1);
+  border: 1px solid rgba(244,63,94,0.22);
+  border-radius: 6px;
+  color: #fb7185;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.tab-btn-reject:hover:not(:disabled) {
+  background: rgba(244,63,94,0.18);
+  border-color: rgba(244,63,94,0.38);
+}
+
+.tab-btn-approve:disabled,
+.tab-btn-reject:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
