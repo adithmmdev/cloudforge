@@ -7,14 +7,26 @@ import asyncio
 
 logger = logging.getLogger(__name__)
 
-MODEL_ID = "minimax.minimax-m2.5"
+MODEL_ID = os.getenv("AWS_BEDROCK_MODEL_ID", "minimax.minimax-m2.5")
 
 def get_bedrock_client():
+    ak = os.getenv("AWS_ACCESS_KEY_ID")
+    sk = os.getenv("AWS_SECRET_ACCESS_KEY")
+    
+    bearer_token = os.getenv("AWS_BEARER_TOKEN_BEDROCK")
+    if bearer_token and bearer_token.startswith("ABSK"):
+        import base64
+        try:
+            decoded = base64.b64decode(bearer_token[4:]).decode('utf-8')
+            ak, sk = decoded.split(":", 1)
+        except Exception as e:
+            logger.error(f"Failed to parse AWS_BEARER_TOKEN_BEDROCK: {e}")
+
     return boto3.client(
         'bedrock-runtime',
         region_name=os.getenv("AWS_REGION", "us-east-1"),
-        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY")
+        aws_access_key_id=ak,
+        aws_secret_access_key=sk
     )
 
 def invoke_minimax_with_tools(system_prompt: str, messages: List[Dict], tool_config: Dict) -> Dict:
