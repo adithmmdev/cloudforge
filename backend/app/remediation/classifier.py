@@ -13,7 +13,8 @@ PATTERNS = [
     (r"npm ERR! code ERR_SOCKET_TIMEOUT", "build_network_error"),
     (r"npm error notarget No matching version found for (@?[a-zA-Z0-9_\-\.\/]+)", "invalid_package_version"),
     (r"container exits within 2s, no matching CMD found", "missing_or_wrong_start_command"),
-    (r"(?i)(timeout|unreachable|connection timed out)", "timeout_or_unreachable")
+    (r"(?i)(timeout|unreachable|connection timed out)", "timeout_or_unreachable"),
+    (r"(?i)(Docker load failed|SCP failed|Docker save produced empty)", "image_transfer_failed")
 ]
 
 def classify_error(logs_or_status: str) -> dict:

@@ -124,15 +124,37 @@ def run_deployment_pipeline(db: Session, deployment_id: int):
                 if res.returncode != 0:
                     raise DeploymentError(f"Docker save failed: {res.stderr.decode()}", res.returncode)
                 
-                scp_cmd = ["scp", "-O", "-o", "StrictHostKeyChecking=no", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "-i", key_path, tar_file, f"ubuntu@{instance.public_ip}:/tmp/image.tar"]
-                res = subprocess.run(scp_cmd, capture_output=True)
-                if res.returncode != 0:
-                    raise DeploymentError(f"SCP failed: {res.stderr.decode()}", res.returncode)
+                # Verify local file size
+                if not os.path.exists(tar_file) or os.path.getsize(tar_file) < 1000:
+                    raise DeploymentError(f"Docker save produced empty or missing file: {tar_file}")
                 
-                ssh_load_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "-i", key_path, f"ubuntu@{instance.public_ip}", f"docker load -i /tmp/image.tar && rm -f /tmp/image.tar"]
-                res = subprocess.run(ssh_load_cmd, capture_output=True)
-                if res.returncode != 0:
-                    raise DeploymentError(f"Docker load failed: {res.stderr.decode()}", res.returncode)
+                remote_tar = f"/home/ubuntu/{image_tag.replace(':', '_')}.tar"
+                scp_cmd = ["scp", "-O", "-o", "StrictHostKeyChecking=no", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "-i", key_path, tar_file, f"ubuntu@{instance.public_ip}:{remote_tar}"]
+                ssh_load_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "-i", key_path, f"ubuntu@{instance.public_ip}", f"docker load -i {remote_tar} && rm -f {remote_tar}"]
+                
+                transfer_success = False
+                last_err = ""
+                for retry in range(3):
+                    res_scp = subprocess.run(scp_cmd, capture_output=True)
+                    if res_scp.returncode != 0:
+                        last_err = f"SCP failed: {res_scp.stderr.decode()}"
+                        time.sleep(2)
+                        continue
+                    
+                    res_load = subprocess.run(ssh_load_cmd, capture_output=True)
+                    if res_load.returncode != 0:
+                        last_err = f"Docker load failed for {remote_tar}: {res_load.stderr.decode()}"
+                        time.sleep(2)
+                        continue
+                    
+                    transfer_success = True
+                    break
+                    
+                if not transfer_success:
+                    raise DeploymentError(last_err)
+                
+                # Clean up local tar file
+                os.remove(tar_file)
                 
         # Step 4: Launch Container
         logger.info(f"Deployment {deployment_id}: Launching container")
