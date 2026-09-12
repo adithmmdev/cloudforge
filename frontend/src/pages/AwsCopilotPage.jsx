@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import useAwsCopilotStream from '../hooks/useAwsCopilotStream';
+import gsap from 'gsap';
+import { useGSAP } from '@gsap/react';
+import { Wave } from '../components/loading-ui/wave.jsx';
 
 export default function AwsCopilotPage() {
   const [sessions, setSessions] = useState([]);
@@ -11,6 +14,7 @@ export default function AwsCopilotPage() {
   
   const { isStreaming, streamingContent, statusMessage, error, sendMessage } = useAwsCopilotStream();
   const messagesEndRef = useRef(null);
+  const containerRef = useRef(null);
 
   useEffect(() => {
     fetchSessions();
@@ -24,19 +28,24 @@ export default function AwsCopilotPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingContent, statusMessage]);
 
+  useGSAP(() => {
+    if (messages.length > 0) {
+      gsap.fromTo('.msg-animate-in:last-child', 
+        { opacity: 0, y: 15, scale: 0.98 },
+        { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: 'power3.out' }
+      );
+    }
+  }, { scope: containerRef, dependencies: [messages] });
+
   const fetchSessions = async () => {
     try {
       const res = await fetch('/api/aws-copilot/sessions');
       if (res.ok) {
         const data = await res.json();
         setSessions(data);
-        if (data.length > 0 && !activeSessionId) {
-          setActiveSessionId(data[0].id);
-        }
+        if (data.length > 0 && !activeSessionId) setActiveSessionId(data[0].id);
       }
-    } catch (e) {
-      console.error(e);
-    }
+    } catch {}
   };
 
   const fetchMessages = async (sid) => {
@@ -46,127 +55,105 @@ export default function AwsCopilotPage() {
         const data = await res.json();
         setMessages(data.messages || []);
       }
-    } catch (e) {
-      console.error(e);
-    }
+    } catch {}
   };
 
-  const createSession = async () => {
+  const handleNewSession = async () => {
     try {
       const res = await fetch('/api/aws-copilot/sessions', { method: 'POST' });
       if (res.ok) {
-        const newSession = await res.json();
-        setSessions([newSession, ...sessions]);
-        setActiveSessionId(newSession.id);
+        const data = await res.json();
+        setSessions([data, ...sessions]);
+        setActiveSessionId(data.id);
         setMessages([]);
       }
-    } catch (e) {
-      console.error(e);
-    }
+    } catch {}
   };
 
-  const handleSend = async (e) => {
+  const handleSend = (e) => {
     e.preventDefault();
     if (!inputText.trim() || isStreaming) return;
     
     let sid = activeSessionId;
     if (!sid) {
-       const res = await fetch('/api/aws-copilot/sessions', { method: 'POST' });
-       if (res.ok) {
-         const newSession = await res.json();
-         setSessions([newSession, ...sessions]);
-         setActiveSessionId(newSession.id);
-         sid = newSession.id;
-       }
+      handleNewSession().then(() => {
+        // Simple fallback
+        setTimeout(() => handleSend(e), 500);
+      });
+      return;
     }
-    
-    const userText = inputText;
+
+    const newMsg = { role: 'user', content: inputText };
+    setMessages(prev => [...prev, newMsg]);
     setInputText('');
-    setMessages(prev => [...prev, { role: 'user', content: userText, id: Date.now() }]);
     
-    sendMessage(sid, userText, () => {
+    sendMessage(sid, inputText, () => {
       fetchMessages(sid);
-      fetchSessions();
     });
   };
 
   return (
-    <div className="flex h-[calc(100vh-40px)] w-full overflow-hidden" style={{ background: '#050506' }}>
-      <div className="w-64 flex-shrink-0 flex flex-col transition-all h-full" style={{ background: '#020203', borderRight: '1px solid rgba(255,255,255,0.06)' }}>
-        <div className="p-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+    <div ref={containerRef} className="h-[calc(100vh-40px)] flex overflow-hidden w-full" style={{ background: '#050506' }}>
+      
+      {/* SIDEBAR */}
+      <div className="w-[260px] flex-shrink-0 flex flex-col border-r border-white/5" style={{ background: 'rgba(255, 255, 255, 0.03)', backdropFilter: 'blur(48px)', WebkitBackdropFilter: 'blur(48px)', boxShadow: 'inset 1px 1px 0 rgba(255,255,255,0.1), 8px 0 32px rgba(0,0,0,0.5)' }}>
+        <div className="p-4 border-b border-white/5 flex items-center justify-between">
+          <div className="font-semibold text-sm" style={{ color: '#EDEDEF' }}>AWS Copilot</div>
           <button 
-            onClick={createSession}
-            className="w-full py-2.5 rounded-xl font-medium text-sm transition-all outline-none"
-            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#EDEDEF' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+            onClick={handleNewSession}
+            className="w-7 h-7 flex items-center justify-center rounded-md transition-colors hover:bg-white/10"
+            style={{ color: '#f97316' }}
+            title="New Session"
           >
-            + New AWS Chat
+            +
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-3 py-4" style={{ scrollbarWidth: 'none' }}>
-          {sessions.length === 0 ? (
-            <div className="text-center py-10 opacity-70">
-              <p className="text-xs font-medium" style={{ color: '#8A8F98' }}>No history</p>
-            </div>
-          ) : (
-            sessions.map(s => (
-              <button
-                key={s.id}
-                onClick={() => setActiveSessionId(s.id)}
-                className={`w-full text-left p-2.5 rounded-lg mb-1 truncate text-sm transition-all`}
-                style={{
-                  background: activeSessionId === s.id ? 'rgba(255,255,255,0.06)' : 'transparent',
-                  color: activeSessionId === s.id ? '#EDEDEF' : '#8A8F98',
-                  border: `1px solid ${activeSessionId === s.id ? 'rgba(255,255,255,0.1)' : 'transparent'}`
-                }}
-                onMouseEnter={e => {
-                  if (activeSessionId !== s.id) e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
-                  e.currentTarget.style.color = '#EDEDEF';
-                }}
-                onMouseLeave={e => {
-                  if (activeSessionId !== s.id) e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.color = activeSessionId === s.id ? '#EDEDEF' : '#8A8F98';
-                }}
-              >
-                {s.title}
-              </button>
-            ))
+        <div className="flex-1 overflow-y-auto p-3 space-y-1">
+          {sessions.map(s => (
+            <button
+              key={s.id}
+              onClick={() => setActiveSessionId(s.id)}
+              className={`w-full text-left px-3 py-2.5 rounded-lg text-sm truncate transition-colors ${
+                activeSessionId === s.id ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5'
+              }`}
+            >
+              {s.title || `Session ${s.id}`}
+            </button>
+          ))}
+          {sessions.length === 0 && (
+            <div className="text-xs text-center p-4 text-gray-500">No sessions yet</div>
           )}
         </div>
       </div>
-      
-      <div className="flex-1 flex flex-col relative h-full">
-        <div className="flex-shrink-0 h-[60px] flex items-center justify-between px-6 z-10 w-full backdrop-blur-md"
-          style={{ background: 'rgba(5,5,6,0.7)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-          <h1 className="text-[15px] font-semibold flex items-center gap-2" style={{ color: '#EDEDEF' }}>
-            <span className="text-orange-500">☁️</span> AWS Copilot
-          </h1>
-          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded border"
-            style={{ color: '#4ade80', background: 'rgba(34,197,94,0.1)', borderColor: 'rgba(34,197,94,0.3)' }}>
-            Read-Only Safety
-          </span>
-        </div>
+
+      {/* CHAT AREA */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden relative items-center w-full">
         
-        <div className="flex-1 overflow-y-auto px-6 pt-6 pb-32 space-y-8" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+        <div className="flex-1 overflow-y-auto w-full max-w-4xl px-4 py-8 pb-32 flex flex-col gap-6"
+          style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+          
           {messages.length === 0 && !isStreaming && (
-            <div className="h-full flex items-center justify-center flex-col mt-20">
-              <div className="relative mb-6">
-                <div className="w-20 h-20 rounded-[28px] flex items-center justify-center shadow-2xl"
-                  style={{ background: 'linear-gradient(135deg, #f97316 0%, #f59e0b 100%)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                  <span className="text-3xl text-white">☁️</span>
-                </div>
+            <div className="flex-1 flex flex-col items-center justify-center h-full">
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6"
+                style={{ background: 'rgba(249, 115, 22, 0.1)', border: '1px solid rgba(249, 115, 22, 0.2)' }}>
+                <span style={{ fontSize: '24px' }}>~</span>
               </div>
-              <h2 className="text-2xl font-bold mb-4 tracking-tight" style={{ color: '#EDEDEF' }}>How can I help you with AWS today?</h2>
-              <div className="mt-6 flex flex-col md:flex-row gap-3 text-sm">
-                <button onClick={() => setInputText("List my running EC2 instances")} 
-                  className="px-4 py-2.5 rounded-lg transition-all shadow-sm font-medium outline-none"
+              <h2 className="text-xl font-medium mb-2" style={{ color: '#EDEDEF' }}>AWS Copilot</h2>
+              <p className="text-sm text-center max-w-md" style={{ color: '#8A8F98' }}>
+                I can help you manage your AWS infrastructure, analyze costs, list EC2 instances, and understand your cloud footprint.
+              </p>
+              
+              <div className="mt-10 flex flex-wrap gap-2 justify-center max-w-lg">
+                <button 
+                  onClick={() => { setInputText("List all running EC2 instances"); }}
+                  className="px-4 py-2 text-xs rounded-full transition-colors cursor-pointer"
                   style={{ background: 'rgba(255,255,255,0.04)', color: '#EDEDEF', border: '1px solid rgba(255,255,255,0.08)' }}
                   onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
-                >List running EC2 instances</button>
-                <button onClick={() => setInputText("What is my AWS cost for this month?")} 
-                  className="px-4 py-2.5 rounded-lg transition-all shadow-sm font-medium outline-none"
+                >List all running EC2 instances</button>
+                <button 
+                  onClick={() => { setInputText("Check month-to-date cost"); }}
+                  className="px-4 py-2 text-xs rounded-full transition-colors cursor-pointer"
                   style={{ background: 'rgba(255,255,255,0.04)', color: '#EDEDEF', border: '1px solid rgba(255,255,255,0.08)' }}
                   onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
@@ -176,19 +163,20 @@ export default function AwsCopilotPage() {
           )}
           
           {messages.map((m, i) => (
-            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-3xl rounded-3xl p-5 ${m.role === 'user' ? 'rounded-tr-sm' : 'rounded-tl-sm'}`}
+            <div key={i} className={`flex msg-animate-in ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-3xl rounded-[20px] p-5 shadow-[0_4px_24px_rgba(0,0,0,0.2)] ${m.role === 'user' ? 'rounded-tr-sm' : 'rounded-tl-sm'}`}
                 style={{ 
-                  background: m.role === 'user' ? '#f97316' : 'rgba(0,0,0,0.4)', 
+                  background: m.role === 'user' ? 'linear-gradient(to bottom, #f97316, #ea580c)' : 'rgba(255,255,255,0.03)', 
                   color: m.role === 'user' ? '#fff' : '#EDEDEF',
-                  border: m.role === 'user' ? 'none' : '1px solid rgba(255,255,255,0.08)'
+                  border: m.role === 'user' ? 'none' : '1px solid rgba(255,255,255,0.08)',
+                  boxShadow: m.role === 'user' ? 'inset 0 1px 0 rgba(255,255,255,0.2), 0 4px 12px rgba(249,115,22,0.3)' : '0 4px 20px rgba(0,0,0,0.2)'
                 }}>
                 {m.role === 'assistant' && m.tool_calls && m.tool_calls.length > 0 && (
                   <div className="mb-4 p-3 rounded-lg text-xs font-mono" style={{ background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.05)' }}>
                     <div className="mb-2 font-bold uppercase tracking-wider" style={{ color: '#8A8F98' }}>User-Safe Decision Trace</div>
                     {m.tool_calls.map((t, idx) => (
                       <div key={idx} className="mb-2 last:mb-0">
-                        <div style={{ color: '#818cf8' }}>⚡ Tool: {t.tool}</div>
+                        <div style={{ color: '#818cf8' }}>► Tool: {t.tool}</div>
                         <div className="truncate" style={{ color: '#8A8F98' }}>Result: {JSON.stringify(t.result).substring(0, 100)}...</div>
                       </div>
                     ))}
@@ -203,11 +191,12 @@ export default function AwsCopilotPage() {
           
           {isStreaming && (
              <div className="flex justify-start">
-               <div className="max-w-3xl rounded-3xl rounded-tl-sm p-5 w-full"
+               <div className="max-w-3xl rounded-3xl rounded-tl-sm p-5 w-full flex items-center gap-3"
                  style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                  {statusMessage && (
-                    <div className="text-sm animate-pulse flex items-center mb-3 font-medium" style={{ color: '#f59e0b' }}>
-                      <span className="mr-2">⚡</span> {statusMessage}
+                  {!streamingContent && (
+                    <div className="flex items-center gap-3">
+                      <Wave className="h-6 w-12" />
+                      <span className="text-sm font-medium" style={{ color: '#8A8F98' }}>{statusMessage || 'Analyzing...'}</span>
                     </div>
                   )}
                   {streamingContent && (

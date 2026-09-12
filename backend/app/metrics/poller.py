@@ -49,12 +49,9 @@ def poll_metrics_for_instance(db: Session, instance: Instance):
     setup_state = db.query(AWSSetupState).filter_by(setup_status='complete').first()
     key_path = setup_state.ssh_key_path if setup_state else os.getenv("EC2_SSH_KEY_PATH", "keys/cloudforge-key.pem")
     
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    import subprocess
     
     try:
-        ssh.connect(instance.public_ip, username='ubuntu', key_filename=key_path, timeout=5)
-        
         active_deployments = db.query(Deployment).filter(
             Deployment.instance_id == instance.id,
             Deployment.status.in_(['deployed', 'live'])
@@ -63,8 +60,13 @@ def poll_metrics_for_instance(db: Session, instance: Instance):
         if not active_deployments:
             return
             
-        stdin, stdout, stderr = ssh.exec_command('docker stats --no-stream --format "{{json .}}"')
-        output = stdout.read().decode()
+        cmd_docker = ["ssh", "-i", key_path, "-o", "StrictHostKeyChecking=no", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", f"ubuntu@{instance.public_ip}", "docker stats --no-stream --format '{{json .}}'"]
+        res = subprocess.run(cmd_docker, capture_output=True, text=True)
+        if res.returncode != 0:
+            logger.warning(f"Failed to run docker stats on {instance.public_ip}: {res.stderr}")
+            return
+            
+        output = res.stdout
         
         stats_map = {}
         for line in output.strip().split('\n'):
@@ -118,9 +120,8 @@ def poll_metrics_for_instance(db: Session, instance: Instance):
                     
         db.commit()
     except Exception as e:
-        logger.error(f"Error polling metrics for instance {instance.id}: {e}")
-    finally:
-        ssh.close()
+        import traceback
+        logger.error(f"Error polling metrics for instance {instance.id}: {e}\n{traceback.format_exc()}")
 
 import threading
 from app.db.session import SessionLocal

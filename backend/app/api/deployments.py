@@ -104,7 +104,16 @@ def resume_deployment(id: int, background_tasks: BackgroundTasks, db: Session = 
     db.add(StageEvent(deployment_id=dep.id, stage="resuming", detail="Deployment resumed by user"))
     db.commit()
 
-    background_tasks.add_task(run_orchestration_loop, db, id)
+    def _resume_bg(dep_id: int):
+        from app.db.session import SessionLocal
+        from app.orchestrator.loop import run_orchestration_loop
+        local_db = SessionLocal()
+        try:
+            run_orchestration_loop(local_db, dep_id)
+        finally:
+            local_db.close()
+            
+    background_tasks.add_task(_resume_bg, id)
 
     try:
         loop = asyncio.get_running_loop()

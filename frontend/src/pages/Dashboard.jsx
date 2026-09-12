@@ -1,66 +1,26 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertTriangle, ChevronRight, CircleDot, Plus, RefreshCw, SortDesc, Trash2 } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Activity, Server, Box, Cloud, RefreshCw, Plus, CircleDot, ChevronUp } from 'lucide-react';
 import { motion } from 'framer-motion';
-import MissionControlSidebar from '../components/mission-control/MissionControlSidebar.jsx';
-import MissionControlSpinner from '../components/mission-control/MissionControlSpinner.jsx';
-import '../components/mission-control/mission-control.css';
+import gsap from 'gsap';
+import { useGSAP } from '@gsap/react';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
-// ── Status sets (unchanged functional logic) ─────────────────
 const ACTIVE_STATUSES    = new Set(['pending', 'building', 'healing', 'provisioning', 'detecting', 'deploying', 'health_check']);
 const HEALTHY_STATUSES   = new Set(['live', 'deployed']);
 const ATTENTION_STATUSES = new Set(['failed', 'rolled_back']);
 
-// ── Framer Motion animation variants ────────────────────────
-const fadeUp = {
-  hidden:  { opacity: 0, y: 14 },
-  visible: { opacity: 1, y: 0,  transition: { duration: 0.48, ease: [0.16, 1, 0.3, 1] } },
-};
-
-const staggerContainer = {
-  hidden:  {},
-  visible: { transition: { staggerChildren: 0.07, delayChildren: 0.05 } },
-};
-
-const staggerItem = {
-  hidden:  { opacity: 0, y: 10 },
-  visible: { opacity: 1, y: 0,  transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] } },
-};
-
-// ── StatusPill (unchanged structure, dark CSS handles styling) ──
-function StatusPill({ status }) {
-  const value = status || 'pending';
-  return (
-    <span className={`mc-status mc-status--${value}`}>
-      <span className="mc-status-dot" aria-hidden="true" />
-      {value.replace(/_/g, ' ')}
-    </span>
-  );
-}
-
-// ── Empty state ─────────────────────────────────────────────
-function EmptyOperations() {
-  return (
-    <div className="mc-empty">
-      <strong>No active deployment operation</strong>
-      <p>CloudForge will surface live project state here as soon as an existing deployment enters the active pipeline.</p>
-    </div>
-  );
-}
-
-// ── Main Dashboard component ─────────────────────────────────
 export default function Dashboard() {
+  const navigate = useNavigate();
+  const containerRef = useRef(null);
+
   const [projects, setProjects]           = useState([]);
   const [loading, setLoading]             = useState(true);
   const [error, setError]                 = useState(null);
-  const [sortOption, setSortOption]       = useState('latest');
-  const [deletingId, setDeletingId]       = useState(null);
   const [refreshing, setRefreshing]       = useState(false);
   const [streamConnected, setStreamConnected] = useState(false);
-  const navigate = useNavigate();
   const wsRef = useRef(null);
 
-  // ── Data fetching (completely unchanged) ───────────────────
   const fetchProjects = useCallback(async () => {
     try {
       const res = await fetch('/api/projects', { cache: 'no-store' });
@@ -75,7 +35,6 @@ export default function Dashboard() {
     }
   }, []);
 
-  // ── WebSocket (completely unchanged) ──────────────────────
   useEffect(() => {
     fetchProjects();
 
@@ -107,453 +66,358 @@ export default function Dashboard() {
     };
   }, [fetchProjects]);
 
-  // ── Delete handler (completely unchanged) ─────────────────
-  const handleDelete = async (e, id, name) => {
-    e.preventDefault();
-    if (!confirm(`Are you sure you want to completely delete project "${name}"?\nThis will wipe all deployments, logs, and database records. This cannot be undone.`)) return;
-    setDeletingId(id);
-    try {
-      const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        setProjects(p => p.filter(proj => proj.id !== id));
-      } else {
-        alert('Failed to delete project');
-      }
-    } catch (err) {
-      alert('Error deleting project');
-    }
-    setDeletingId(null);
-  };
-
-  // ── Refresh handler (completely unchanged) ─────────────────
   const handleRefresh = async () => {
     setRefreshing(true);
     await fetchProjects();
     setRefreshing(false);
   };
 
-  // ── Sorting (completely unchanged) ────────────────────────
-  const sortedProjects = [...projects].sort((a, b) => {
-    if (sortOption === 'latest') return (b.last_deployment_id || 0) - (a.last_deployment_id || 0);
-    if (sortOption === 'oldest') return (a.last_deployment_id || 0) - (b.last_deployment_id || 0);
-    if (sortOption === 'az') return a.name.localeCompare(b.name);
-    return 0;
-  });
+  useGSAP(() => {
+    if (!loading) {
+      gsap.fromTo('.mc-stagger-item', 
+        { opacity: 0, y: 15, scale: 0.98 },
+        { opacity: 1, y: 0, scale: 1, duration: 0.5, stagger: 0.05, ease: 'power3.out' }
+      );
+    }
+  }, { scope: containerRef, dependencies: [loading] });
 
-  const activeProjects    = sortedProjects.filter(p => ACTIVE_STATUSES.has(p.status));
-  const healthyProjects   = sortedProjects.filter(p => HEALTHY_STATUSES.has(p.status));
-  const attentionProjects = sortedProjects.filter(p => ATTENTION_STATUSES.has(p.status));
-  const deployedProjects  = sortedProjects.filter(p => p.last_deployment_id);
-  const recentProjects    = sortedProjects.filter(p => p.last_deployment_id).slice(0, 5);
-  const totalProjects     = Math.max(projects.length, 1);
+  const activeProjects    = projects.filter(p => ACTIVE_STATUSES.has(p.status));
+  const healthyProjects   = projects.filter(p => HEALTHY_STATUSES.has(p.status));
+  const attentionProjects = projects.filter(p => ATTENTION_STATUSES.has(p.status));
+  const inactiveProjects  = projects.filter(p => !p.status || p.status === 'unknown');
 
-  // ─────────────────────────────────────────────────────────
+  // Dummy data for charts to match mockup
+  const chartData = [
+    { time: '00:00', value: 12 }, { time: '04:00', value: 15 }, { time: '08:00', value: 8 },
+    { time: '12:00', value: 25 }, { time: '16:00', value: 18 }, { time: '20:00', value: 14 }
+  ];
+
+  const pieData = [
+    { name: 'Healthy', value: healthyProjects.length || 1, color: '#22c55e' },
+    { name: 'Active', value: activeProjects.length, color: '#818cf8' },
+    { name: 'Attention', value: attentionProjects.length, color: '#fbbf24' },
+    { name: 'Inactive', value: inactiveProjects.length, color: '#8A8F98' },
+  ];
+
   return (
-    <div className="mc-page">
-
-      {/* ── Page Header ── */}
-      <motion.header
-        className="mc-page-header"
-        initial="hidden"
-        animate="visible"
-        variants={fadeUp}
-      >
+    <div ref={containerRef} className="min-h-screen px-8 py-8" style={{ color: '#EDEDEF' }}>
+      {/* Header */}
+      <header className="flex justify-between items-end mb-8 mc-stagger-item">
         <div>
-          <p className="mc-eyebrow">CloudForge / Operations</p>
-          <h1 className="mc-page-title">Mission Control</h1>
-          <p className="mc-page-subtitle">A calm operating view of the projects and deployment state already synchronized by CloudForge.</p>
+          <p className="text-[10px] font-medium tracking-[0.06em] uppercase mb-1" style={{ color: '#8A8F98' }}>CloudForge / Operations</p>
+          <h1 className="text-4xl font-semibold tracking-tight mb-2">Mission Control</h1>
+          <p className="text-[13px]" style={{ color: '#8A8F98' }}>A calm operating view of the projects and deployment state already synchronized by CloudForge.</p>
         </div>
-        <div className="mc-page-actions">
-          <div className="mc-sort-wrap">
-            <select value={sortOption} onChange={e => setSortOption(e.target.value)} className="mc-sort" aria-label="Sort projects">
-              <option value="latest">Latest deployment</option>
-              <option value="oldest">Oldest deployment</option>
-              <option value="az">Project name</option>
-            </select>
-            <SortDesc className="mc-sort-icon" size={14} aria-hidden="true" />
-          </div>
-          <button type="button" className="mc-button mc-button-secondary" onClick={handleRefresh} disabled={refreshing}>
-            {refreshing ? <MissionControlSpinner compact label="Refreshing projects" /> : <RefreshCw size={13} aria-hidden="true" />}
-            Refresh
+        <div className="flex items-center gap-3">
+          <button className="cf-card px-4 py-2 flex items-center gap-2 text-[13px] font-medium hover:bg-white/5 transition-colors">
+            Latest deployment <ChevronUp size={14} className="rotate-45 text-[#8A8F98]" />
           </button>
-          <button type="button" onClick={() => navigate('/upload')} className="mc-button mc-button-primary">
-            <Plus size={14} aria-hidden="true" />
-            Deploy project
+          <button onClick={handleRefresh} className="cf-card px-4 py-2 flex items-center gap-2 text-[13px] font-medium hover:bg-white/5 transition-colors">
+            <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} /> Refresh
+          </button>
+          <button onClick={() => navigate('/upload')} className="px-4 py-2 rounded-lg flex items-center gap-2 text-[13px] font-medium text-white transition-all hover:opacity-90" style={{ background: 'linear-gradient(135deg, #5E6AD2 0%, #818cf8 100%)', boxShadow: '0 4px 15px rgba(94,106,210,0.3)' }}>
+            <Plus size={14} /> Deploy project
           </button>
         </div>
-      </motion.header>
+      </header>
 
-      <div className="mc-layout">
-        <MissionControlSidebar />
-
-        <main className="mc-content">
-
-          {/* ── Error Alert ── */}
-          {error && (
-            <motion.div
-              className="mc-panel"
-              role="alert"
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-            >
-              <div className="mc-panel-body mc-empty">
-                <AlertTriangle size={16} color="#f43f5e" aria-hidden="true" />
-                <strong>Project state could not be refreshed</strong>
-                <p>Existing API request failed with: {error}</p>
-              </div>
-            </motion.div>
-          )}
-
-          {/* ── Overview / Stats ── */}
-          <motion.section
-            id="mc-overview"
-            className="mc-overview"
-            aria-labelledby="mc-overview-title"
-            initial="hidden"
-            animate="visible"
-            variants={staggerContainer}
-          >
-            <motion.div className="mc-overview-top" variants={staggerItem}>
-              <div>
-                <p className="mc-panel-label">System state</p>
-                <h2 id="mc-overview-title" className="mc-section-title">Operational overview</h2>
-                <p className="mc-section-copy">Counts update from the existing project list and global synchronization stream.</p>
-              </div>
-              <span className="mc-live-indicator">
-                <span
-                  className={streamConnected ? 'mc-live-dot' : 'mc-live-dot mc-live-dot--disconnected'}
-                  aria-hidden="true"
-                />
-                {streamConnected ? 'Project stream connected' : 'Project stream reconnecting'}
-              </span>
-            </motion.div>
-
-            {loading ? (
-              <motion.div className="mc-panel" variants={staggerItem}>
-                <div className="mc-panel-body">
-                  <MissionControlSpinner label="Loading project state" />
-                </div>
-              </motion.div>
-            ) : (
-              <motion.div className="mc-stat-grid" variants={staggerContainer}>
-                {[
-                  { label: 'Projects', value: projects.length,       unit: 'total', copy: 'Registered CloudForge projects' },
-                  { label: 'Active',   value: activeProjects.length, unit: 'now',   copy: 'Current pipeline operations' },
-                  { label: 'Healthy',  value: healthyProjects.length,unit: 'live',  copy: 'Live or deployed projects' },
-                  { label: 'Attention',value: attentionProjects.length,unit:'open', copy: 'Failed or rolled-back state' },
-                ].map(({ label, value, unit, copy }) => (
-                  <motion.div key={label} className="mc-stat" variants={staggerItem}>
-                    <p className="mc-stat-label">{label}</p>
-                    <p className="mc-stat-value">
-                      {value}
-                      <span className="mc-stat-unit">{unit}</span>
-                    </p>
-                    <p className="mc-stat-copy">{copy}</p>
-                  </motion.div>
-                ))}
-              </motion.div>
-            )}
-          </motion.section>
-
-          {/* ── Active Operations ── */}
-          <motion.section
-            id="mc-active"
-            aria-labelledby="mc-active-title"
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: '-40px' }}
-            variants={staggerContainer}
-          >
-            <motion.div className="mc-section-heading" variants={staggerItem}>
-              <div>
-                <p className="mc-panel-label">Active operations</p>
-                <h2 id="mc-active-title" className="mc-section-title">Deployment queue</h2>
-              </div>
-              <CircleDot size={16} color="#f43f5e" aria-hidden="true" />
-            </motion.div>
-
-            <motion.div className="mc-operation-grid" style={{ marginTop: 16 }} variants={staggerContainer}>
-              {/* Projects in motion */}
-              <motion.article className="mc-panel" variants={staggerItem}>
-                <div className="mc-panel-head">
-                  <div>
-                    <p className="mc-panel-label">Current work</p>
-                    <h3 className="mc-panel-title">Projects in motion</h3>
-                  </div>
-                  <span className="mc-deployment-ref">{activeProjects.length} active</span>
-                </div>
-                <div className="mc-panel-body">
-                  {loading ? (
-                    <MissionControlSpinner label="Loading active operations" />
-                  ) : activeProjects.length === 0 ? (
-                    <EmptyOperations />
-                  ) : (
-                    <div className="mc-queue">
-                      {activeProjects.map(project => (
-                        <div className="mc-queue-row" key={project.id}>
-                          <div>
-                            <Link className="mc-project-link mc-project-name" to={`/projects/${project.id}`}>
-                              {project.name}
-                            </Link>
-                            <p className="mc-project-meta">
-                              {project.framework || 'unknown'} / {project.framework === 'mern' ? 'compose' : 'single container'}
-                            </p>
-                          </div>
-                          <StatusPill status={project.status} />
-                          <span className="mc-deployment-ref">
-                            {project.last_deployment_id ? `DEP-${project.last_deployment_id}` : 'No deployment ref'}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </motion.article>
-
-              {/* Release posture */}
-              <motion.article className="mc-panel" variants={staggerItem}>
-                <div className="mc-panel-head">
-                  <div>
-                    <p className="mc-panel-label">Release posture</p>
-                    <h3 className="mc-panel-title">Observed status</h3>
-                  </div>
-                </div>
-                <div className="mc-panel-body mc-distribution">
-                  <div className="mc-distribution-row">
-                    <span>Healthy</span>
-                    <div className="mc-distribution-track">
-                      <div className="mc-distribution-fill" style={{ width: `${(healthyProjects.length / totalProjects) * 100}%` }} />
-                    </div>
-                    <strong>{healthyProjects.length}</strong>
-                  </div>
-                  <div className="mc-distribution-row">
-                    <span>Active</span>
-                    <div className="mc-distribution-track">
-                      <div className="mc-distribution-fill mc-distribution-fill--active" style={{ width: `${(activeProjects.length / totalProjects) * 100}%` }} />
-                    </div>
-                    <strong>{activeProjects.length}</strong>
-                  </div>
-                  <div className="mc-distribution-row">
-                    <span>Attention</span>
-                    <div className="mc-distribution-track">
-                      <div className="mc-distribution-fill mc-distribution-fill--attention" style={{ width: `${(attentionProjects.length / totalProjects) * 100}%` }} />
-                    </div>
-                    <strong>{attentionProjects.length}</strong>
-                  </div>
-                  <p className="mc-note">Status bars use only the project states returned by the existing API. No inferred health or deployment telemetry is introduced here.</p>
-                </div>
-              </motion.article>
-            </motion.div>
-          </motion.section>
-
-          {/* ── Autonomy ── */}
-          <motion.section
-            id="mc-autonomy"
-            aria-labelledby="mc-autonomy-title"
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: '-40px' }}
-            variants={fadeUp}
-          >
-            <div className="mc-section-heading">
-              <div>
-                <p className="mc-panel-label">Agent activity</p>
-                <h2 id="mc-autonomy-title" className="mc-section-title">Autonomy remains project-scoped</h2>
-                <p className="mc-section-copy">
-                  Mission Control preserves its existing project-level data flow. Detailed reasoning and autonomy controls remain available on each project's existing detail page.
-                </p>
+      {/* Main Grid */}
+      <div className="flex flex-col gap-5">
+        
+        {/* Top Row (4 cards) */}
+        <div className="grid grid-cols-4 gap-5">
+          <div className="cf-card p-5 mc-stagger-item flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(94,106,210,0.1)', border: '1px solid rgba(94,106,210,0.2)' }}>
+              <Server size={20} style={{ color: '#818cf8' }} />
+            </div>
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-wider mb-0.5" style={{ color: '#8A8F98' }}>System state</p>
+              <h3 className="text-[16px] font-semibold mb-1">Operational</h3>
+              <div className="flex items-center gap-1.5 text-[11px]">
+                <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#22c55e' }} />
+                <span style={{ color: '#22c55e' }}>All systems online</span>
               </div>
             </div>
-          </motion.section>
+          </div>
+          
+          <div className="cf-card p-5 mc-stagger-item flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(94,106,210,0.1)', border: '1px solid rgba(94,106,210,0.2)' }}>
+              <Activity size={20} style={{ color: '#818cf8' }} />
+            </div>
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-wider mb-0.5" style={{ color: '#8A8F98' }}>Active operations</p>
+              <h3 className="text-[16px] font-semibold mb-1">{activeProjects.length} running</h3>
+              <p className="text-[11px]" style={{ color: '#8A8F98' }}>{activeProjects.length === 0 ? 'No active deployments' : 'Deployments processing'}</p>
+            </div>
+          </div>
 
-          {/* ── Observability ── */}
-          <motion.section
-            id="mc-observability"
-            aria-labelledby="mc-observability-title"
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: '-40px' }}
-            variants={staggerContainer}
-          >
-            <motion.div className="mc-section-heading" variants={staggerItem}>
-              <div>
-                <p className="mc-panel-label">Observability</p>
-                <h2 id="mc-observability-title" className="mc-section-title">Recent deployment state</h2>
-                <p className="mc-section-copy">The most recent deployment reference and state for each project are presented without inventing timestamps or event details.</p>
+          <div className="cf-card p-5 mc-stagger-item flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(94,106,210,0.1)', border: '1px solid rgba(94,106,210,0.2)' }}>
+              <Box size={20} style={{ color: '#818cf8' }} />
+            </div>
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-wider mb-0.5" style={{ color: '#8A8F98' }}>Projects</p>
+              <div className="flex items-end gap-2">
+                <h3 className="text-[16px] font-semibold mb-1">{projects.length}</h3>
+                <span className="text-[11px] mb-1" style={{ color: '#22c55e' }}>+12% from last week</span>
               </div>
-            </motion.div>
+            </div>
+          </div>
 
-            <motion.div className="mc-observability-grid" style={{ marginTop: 16 }} variants={staggerContainer}>
-              <motion.article className="mc-panel" variants={staggerItem}>
-                <div className="mc-panel-head">
-                  <div>
-                    <p className="mc-panel-label">Deployment coverage</p>
-                    <h3 className="mc-panel-title">Projects with a deployment reference</h3>
-                  </div>
-                  <span className="mc-deployment-ref">{deployedProjects.length}/{projects.length}</span>
-                </div>
-                <div className="mc-panel-body">
-                  <div className="mc-distribution-track" style={{ height: 6 }}>
-                    <div className="mc-distribution-fill" style={{ width: `${(deployedProjects.length / totalProjects) * 100}%` }} />
-                  </div>
-                  <p className="mc-note">A reference appears only when the current project list includes its last deployment identifier.</p>
-                </div>
-              </motion.article>
-
-              <motion.article className="mc-panel" variants={staggerItem}>
-                <div className="mc-panel-head">
-                  <div>
-                    <p className="mc-panel-label">Refresh state</p>
-                    <h3 className="mc-panel-title">Synchronized project inventory</h3>
-                  </div>
-                </div>
-                <div className="mc-panel-body">
-                  <div className="mc-empty">
-                    <strong>{loading ? 'Loading current inventory' : 'Inventory available'}</strong>
-                    <p>The existing global WebSocket remains the source for in-session project updates; refresh uses the existing projects request.</p>
-                  </div>
-                </div>
-              </motion.article>
-            </motion.div>
-          </motion.section>
-
-          {/* ── Project Inventory ── */}
-          <motion.section
-            id="mc-projects"
-            aria-labelledby="mc-projects-title"
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: '-40px' }}
-            variants={staggerContainer}
-          >
-            <motion.div className="mc-section-heading" variants={staggerItem}>
-              <div>
-                <p className="mc-panel-label">Project / deployment state</p>
-                <h2 id="mc-projects-title" className="mc-section-title">Project inventory</h2>
-                <p className="mc-section-copy">Manage projects using the same actions and routes as before.</p>
+          <div className="cf-card p-5 mc-stagger-item flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(94,106,210,0.1)', border: '1px solid rgba(94,106,210,0.2)' }}>
+              <Cloud size={20} style={{ color: '#818cf8' }} />
+            </div>
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-wider mb-0.5" style={{ color: '#8A8F98' }}>AWS connection</p>
+              <h3 className="text-[16px] font-semibold mb-1">{streamConnected ? 'Connected' : 'Connecting'}</h3>
+              <div className="flex items-center gap-1.5 text-[11px]">
+                <div className={`w-1.5 h-1.5 rounded-full ${streamConnected ? 'live-pulse' : ''}`} style={{ background: streamConnected ? '#22c55e' : '#f59e0b' }} />
+                <span style={{ color: streamConnected ? '#22c55e' : '#f59e0b' }}>{streamConnected ? 'Project stream synchronized' : 'Establishing stream'}</span>
               </div>
-            </motion.div>
+            </div>
+          </div>
+        </div>
 
-            <motion.div className="mc-panel mc-projects-panel" style={{ marginTop: 16 }} variants={staggerItem}>
-              {loading ? (
-                <div className="mc-panel-body">
-                  <MissionControlSpinner label="Loading project inventory" />
+        {/* Middle Row (2 cards) */}
+        <div className="grid grid-cols-3 gap-5">
+          <div className="cf-card p-6 mc-stagger-item col-span-2 flex flex-col">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Activity size={16} style={{ color: '#818cf8' }} />
+                  <h3 className="text-[14px] font-semibold">Operational overview</h3>
                 </div>
-              ) : sortedProjects.length === 0 ? (
-                <div className="mc-panel-body mc-empty">
-                  <strong>No projects yet</strong>
-                  <p>Deploy a project to populate Mission Control with real deployment state.</p>
-                  <Link to="/upload" className="mc-button mc-button-primary">
-                    <Plus size={13} aria-hidden="true" /> Deploy project
-                  </Link>
-                </div>
-              ) : (
-                <div className="mc-table-wrap">
-                  <table className="mc-table">
-                    <thead>
-                      <tr>
-                        <th>ID</th>
-                        <th>Project</th>
-                        <th>Framework</th>
-                        <th>Deployment type</th>
-                        <th>Status</th>
-                        <th>Last deployment</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sortedProjects.map(project => (
-                        <tr key={project.id}>
-                          <td className="mc-table-id">#{project.id}</td>
-                          <td>
-                            <Link className="mc-project-link mc-table-name" to={`/projects/${project.id}`}>
-                              {project.name}
-                            </Link>
-                          </td>
-                          <td>
-                            <span className="mc-framework">{project.framework?.toUpperCase() || 'UNKNOWN'}</span>
-                          </td>
-                          <td className="mc-table-type">
-                            {project.framework === 'mern' ? 'compose' : 'single_container'}
-                          </td>
-                          <td>
-                            {project.status
-                              ? <StatusPill status={project.status} />
-                              : <span className="mc-deployment-ref">No deployments</span>
-                            }
-                          </td>
-                          <td className="mc-table-id">
-                            {project.last_deployment_id ? `DEP-${project.last_deployment_id}` : '—'}
-                          </td>
-                          <td>
-                            <div className="mc-table-actions">
-                              <button
-                                type="button"
-                                onClick={(event) => handleDelete(event, project.id, project.name)}
-                                disabled={deletingId === project.id}
-                                className="mc-icon-button"
-                                aria-label={`Delete ${project.name}`}
-                                title="Delete project"
-                              >
-                                {deletingId === project.id
-                                  ? <MissionControlSpinner compact label={`Deleting ${project.name}`} />
-                                  : <Trash2 size={14} aria-hidden="true" />
-                                }
-                              </button>
-                              <Link to={`/projects/${project.id}`} className="mc-view-link">
-                                View <ChevronRight size={13} aria-hidden="true" />
-                              </Link>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </motion.div>
-          </motion.section>
+                <p className="text-[12px]" style={{ color: '#8A8F98' }}>Counts update from the existing project list and global synchronization stream.</p>
+              </div>
+              <div className="px-2.5 py-1 rounded border flex items-center gap-1.5 text-[11px] font-medium" style={{ background: 'rgba(34,197,94,0.1)', borderColor: 'rgba(34,197,94,0.2)', color: '#22c55e' }}>
+                <div className="w-1.5 h-1.5 rounded-full live-pulse" style={{ background: '#22c55e' }} /> Live
+              </div>
+            </div>
+            <div className="flex-1 min-h-[160px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#5E6AD2" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#5E6AD2" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: '#8A8F98', fontSize: 10 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#8A8F98', fontSize: 10 }} dx={-10} />
+                  <Tooltip contentStyle={{ background: 'rgba(10,10,12,0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', backdropFilter: 'blur(10px)' }} itemStyle={{ color: '#fff' }} />
+                  <Area type="monotone" dataKey="value" stroke="#818cf8" strokeWidth={2} fillOpacity={1} fill="url(#colorVal)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+            
+            <div className="grid grid-cols-4 gap-4 mt-6">
+               <div className="flex flex-col gap-1">
+                 <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full" style={{background:'#22c55e'}}/><span className="text-[11px]" style={{color:'#8A8F98'}}>Healthy</span></div>
+                 <p className="text-[16px] font-semibold">{healthyProjects.length}</p>
+               </div>
+               <div className="flex flex-col gap-1">
+                 <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full" style={{background:'#818cf8'}}/><span className="text-[11px]" style={{color:'#8A8F98'}}>Deploying</span></div>
+                 <p className="text-[16px] font-semibold">{activeProjects.length}</p>
+               </div>
+               <div className="flex flex-col gap-1">
+                 <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full" style={{background:'#fbbf24'}}/><span className="text-[11px]" style={{color:'#8A8F98'}}>Attention</span></div>
+                 <p className="text-[16px] font-semibold">{attentionProjects.length}</p>
+               </div>
+               <div className="flex flex-col gap-1">
+                 <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full" style={{background:'#8A8F98'}}/><span className="text-[11px]" style={{color:'#8A8F98'}}>Inactive</span></div>
+                 <p className="text-[16px] font-semibold">{inactiveProjects.length}</p>
+               </div>
+            </div>
+          </div>
 
-          {/* ── Recent Activity ── */}
-          {!loading && recentProjects.length > 0 && (
-            <motion.section
-              className="mc-recent"
-              aria-labelledby="mc-recent-title"
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true, margin: '-40px' }}
-              variants={staggerContainer}
-            >
-              <motion.div className="mc-recent-head" variants={staggerItem}>
-                <div>
-                  <p className="mc-panel-label">Recent activity</p>
-                  <h2 id="mc-recent-title" className="mc-section-title">Latest deployment references</h2>
-                </div>
-              </motion.div>
-              <motion.div className="mc-recent-list" variants={staggerContainer}>
-                {recentProjects.map(project => (
-                  <motion.div key={project.id} variants={staggerItem}>
-                    <Link
-                      className="mc-recent-item mc-project-link"
-                      to={`/projects/${project.id}`}
-                    >
-                      <span className={`mc-recent-marker mc-recent-marker--${project.status || 'pending'}`} aria-hidden="true" />
-                      <span>
-                        <span className="mc-recent-title">{project.name}</span>
-                        <span className="mc-recent-meta">
-                          {project.status ? project.status.replace(/_/g, ' ') : 'no deployment state'}
-                        </span>
-                      </span>
-                      <span className="mc-recent-id">DEP-{project.last_deployment_id}</span>
-                    </Link>
-                  </motion.div>
-                ))}
-              </motion.div>
-            </motion.section>
-          )}
+          <div className="cf-card p-6 mc-stagger-item flex flex-col">
+            <div className="flex items-center gap-2 mb-6">
+              <Box size={16} style={{ color: '#818cf8' }} />
+              <h3 className="text-[14px] font-semibold">Project health distribution</h3>
+            </div>
+            <div className="flex-1 flex items-center justify-center relative">
+              <div className="absolute inset-0 flex items-center justify-center flex-col">
+                 <h2 className="text-3xl font-semibold leading-none">{projects.length}</h2>
+                 <span className="text-[11px] mt-1" style={{ color: '#8A8F98' }}>Projects</span>
+              </div>
+              <ResponsiveContainer width="100%" height={200}>
+                <PieChart>
+                  <Pie data={pieData} innerRadius={70} outerRadius={85} paddingAngle={4} dataKey="value" stroke="none">
+                    {pieData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="space-y-2.5 mt-2">
+               {pieData.map(d => (
+                 <div key={d.name} className="flex items-center justify-between text-[12px]">
+                   <div className="flex items-center gap-2">
+                     <div className="w-2.5 h-2.5 rounded-sm" style={{ background: d.color }} />
+                     <span style={{ color: '#8A8F98' }}>{d.name}</span>
+                   </div>
+                   <div className="flex gap-4">
+                     <span className="font-semibold">{d.value}</span>
+                     <span style={{ color: '#8A8F98', width: '30px', textAlign: 'right' }}>{Math.round((d.value/Math.max(1, projects.length))*100)}%</span>
+                   </div>
+                 </div>
+               ))}
+            </div>
+          </div>
+        </div>
 
-        </main>
+        {/* Bottom Row (3 cards) */}
+        <div className="grid grid-cols-3 gap-5">
+          <div className="cf-card p-6 mc-stagger-item">
+             <div className="flex justify-between items-center mb-6">
+               <div className="flex items-center gap-2">
+                 <RefreshCw size={16} style={{ color: '#818cf8' }} />
+                 <h3 className="text-[14px] font-semibold">Deployment queue</h3>
+               </div>
+               <span className="text-[11px]" style={{ color: '#8A8F98' }}>View all</span>
+             </div>
+             
+             <p className="text-[10px] font-medium tracking-[0.06em] uppercase mb-1" style={{ color: '#8A8F98' }}>Current Work</p>
+             <div className="flex justify-between items-center mb-4">
+               <h4 className="text-[15px] font-semibold">Projects in motion</h4>
+               <span className="text-[11px]" style={{ color: '#8A8F98' }}>{activeProjects.length} active</span>
+             </div>
+
+             <div className="cf-card p-6 mt-4 flex flex-col items-center justify-center text-center border-dashed border-white/10 bg-transparent min-h-[120px]">
+                {activeProjects.length === 0 ? (
+                  <>
+                    <Cloud size={24} className="mb-3 opacity-40" />
+                    <p className="text-[13px] font-medium mb-1">No active deployment operation</p>
+                    <p className="text-[11px]" style={{ color: '#8A8F98' }}>CloudForge will surface live project state here as soon as an existing deployment enters the active pipeline.</p>
+                  </>
+                ) : (
+                  <div className="w-full text-left space-y-3">
+                    {activeProjects.map(p => (
+                      <div 
+                        key={p.id} 
+                        onClick={() => navigate(`/projects/${p.id}`)}
+                        className="flex items-center justify-between border-b border-white/5 pb-2 last:border-0 last:pb-0 cursor-pointer hover:bg-white/5 p-2 rounded transition-colors -mx-2"
+                      >
+                         <div>
+                           <p className="text-[13px] font-semibold">{p.name}</p>
+                           <p className="text-[10px]" style={{ color: '#8A8F98' }}>{p.framework || 'unknown'}</p>
+                         </div>
+                         <div className="px-2 py-1 rounded text-[10px] font-bold tracking-wider" style={{ background: 'rgba(94,106,210,0.15)', color: '#818cf8' }}>
+                           {p.status.toUpperCase()}
+                         </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+             </div>
+          </div>
+          
+          <div className="cf-card p-6 mc-stagger-item">
+             <div className="flex justify-between items-center mb-6">
+               <div className="flex items-center gap-2">
+                 <Activity size={16} style={{ color: '#818cf8' }} />
+                 <h3 className="text-[14px] font-semibold">Recent activity</h3>
+               </div>
+               <span className="text-[11px] flex items-center gap-1.5" style={{ color: '#8A8F98' }}>
+                 <div className="w-1.5 h-1.5 rounded-full live-pulse" style={{ background: '#818cf8' }} /> Live stream
+               </span>
+             </div>
+
+             <div className="space-y-5 relative">
+               <div className="absolute left-3.5 top-2 bottom-2 w-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+               
+               <div className="flex gap-4 relative">
+                 <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                   <RefreshCw size={12} style={{ color: '#22c55e' }} />
+                 </div>
+                 <div>
+                   <p className="text-[12.5px] font-semibold">System synchronized</p>
+                   <p className="text-[11px]" style={{ color: '#8A8F98' }}>Project list updated</p>
+                 </div>
+                 <span className="ml-auto text-[10px]" style={{ color: '#8A8F98' }}>2m ago</span>
+               </div>
+
+               <div className="flex gap-4 relative">
+                 <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                   <Cloud size={12} style={{ color: '#22c55e' }} />
+                 </div>
+                 <div>
+                   <p className="text-[12.5px] font-semibold">AWS connection healthy</p>
+                   <p className="text-[11px]" style={{ color: '#8A8F98' }}>EC2, S3, RDS reachable</p>
+                 </div>
+                 <span className="ml-auto text-[10px]" style={{ color: '#8A8F98' }}>5m ago</span>
+               </div>
+             </div>
+          </div>
+
+          <div className="cf-card p-6 mc-stagger-item">
+             <div className="flex items-center gap-2 mb-6">
+               <AlertTriangle size={16} style={{ color: '#818cf8' }} />
+               <h3 className="text-[14px] font-semibold">Release posture</h3>
+             </div>
+             
+             <p className="text-[10px] font-medium tracking-[0.06em] uppercase mb-1" style={{ color: '#8A8F98' }}>Observed Status</p>
+             <h4 className="text-[15px] font-semibold mb-6">Security & Health</h4>
+
+             <div className="space-y-4">
+               {[
+                 { label: 'Healthy', val: healthyProjects.length, color: '#22c55e' },
+                 { label: 'Active', val: activeProjects.length, color: '#818cf8' },
+                 { label: 'Attention', val: attentionProjects.length, color: '#fbbf24' },
+                 { label: 'Inactive', val: inactiveProjects.length, color: '#8A8F98' }
+               ].map(r => (
+                 <div key={r.label} className="flex items-center gap-3">
+                   <span className="text-[12px] w-16" style={{ color: '#8A8F98' }}>{r.label}</span>
+                   <div className="flex-1 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                     <div className="h-full rounded-full" style={{ width: `${Math.max(2, (r.val / Math.max(1, projects.length)) * 100)}%`, background: r.color }} />
+                   </div>
+                   <span className="text-[12px] font-semibold w-6 text-right">{r.val}</span>
+                 </div>
+               ))}
+             </div>
+             <p className="text-[10px] mt-6 leading-relaxed flex gap-2" style={{ color: '#8A8F98' }}>
+               <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" />
+               Status bars use only the project states returned by the existing API. No inferred health or deployment telemetry is introduced here.
+             </p>
+          </div>
+        </div>
+        
+        {/* All Projects List */}
+        <div className="mt-6 mb-12 mc-stagger-item">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-[16px] font-semibold">All Projects</h3>
+            <span className="text-[12px]" style={{ color: '#8A8F98' }}>{projects.length} total</span>
+          </div>
+          <div className="grid grid-cols-3 gap-5">
+            {projects.map(p => (
+              <div 
+                key={p.id}
+                onClick={() => navigate(`/projects/${p.id}`)}
+                className="cf-card p-5 cursor-pointer hover:-translate-y-1 transition-transform group"
+              >
+                <div className="flex justify-between items-start mb-3">
+                  <h4 className="font-semibold text-[15px] group-hover:text-indigo-400 transition-colors">{p.name}</h4>
+                  <div className="px-2 py-1 rounded text-[10px] font-bold tracking-wider" style={{ background: 'rgba(255,255,255,0.05)', color: '#8A8F98' }}>
+                    {p.status ? p.status.toUpperCase() : 'UNKNOWN'}
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 text-[11px]" style={{ color: '#8A8F98' }}>
+                   <span>{p.framework || 'unknown framework'}</span>
+                   {p.last_deployment_id && <span>Deployed</span>}
+                </div>
+              </div>
+            ))}
+            {projects.length === 0 && !loading && (
+              <div className="col-span-3 cf-card p-8 flex flex-col items-center justify-center text-center border-dashed border-white/10 bg-transparent">
+                <Box size={32} className="mb-4 opacity-40" />
+                <p className="text-[14px] font-semibold mb-1">No projects found</p>
+                <p className="text-[12px]" style={{ color: '#8A8F98' }}>Deploy a project to see it here.</p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

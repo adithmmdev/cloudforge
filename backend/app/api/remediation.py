@@ -9,15 +9,20 @@ import logging
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/remediation-actions", tags=["remediation"])
 
-def _run_shadow_and_promote(db, action_id, project_dir, deployment, deployment_type, framework):
+def _run_shadow_and_promote(action_id: int, project_dir: str, deployment_id: int, deployment_type: str, framework: str):
     from app.remediation.grammar import apply_action
     from app.remediation.shadow import run_shadow_verification
-    import shutil, os, time
+    import shutil, os
     from app.orchestrator.loop import run_orchestration_loop
+    from app.db.session import SessionLocal
     
+    db = SessionLocal()
     try:
         action = db.query(RemediationAction).filter(RemediationAction.id == action_id).first()
         if not action: return
+        
+        deployment = db.query(Deployment).filter(Deployment.id == deployment_id).first()
+        if not deployment: return
         
         shadow_dir = f"/app/uploads/shadow_manual_{deployment.id}_{action.id}"
         if os.path.exists(shadow_dir):
@@ -46,10 +51,13 @@ def _run_shadow_and_promote(db, action_id, project_dir, deployment, deployment_t
         
     except Exception as e:
         logger.error(f"Background shadow test failed: {e}")
+        db.rollback()
         action = db.query(RemediationAction).filter(RemediationAction.id == action_id).first()
         if action:
             action.status = "discarded"
             db.commit()
+    finally:
+        db.close()
 
 @router.post("/{id}/approve")
 def approve_action(id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
@@ -74,7 +82,7 @@ def approve_action(id: int, background_tasks: BackgroundTasks, db: Session = Dep
         
     background_tasks.add_task(
         _run_shadow_and_promote, 
-        db, action.id, project_dir, deployment, adapter.deployment_type, adapter.name
+        action.id, project_dir, deployment.id, adapter.deployment_type, adapter.name
     )
     
     return {"status": "ok", "message": "Shadow test started in background"}

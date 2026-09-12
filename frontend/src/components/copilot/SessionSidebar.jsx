@@ -28,7 +28,13 @@ export default function SessionSidebar({
 
   return (
     <div className="w-[260px] flex-shrink-0 flex flex-col h-full overflow-hidden transition-all"
-      style={{ background: '#020203', borderRight: '1px solid rgba(255,255,255,0.06)' }}>
+      style={{ 
+        background: 'rgba(255, 255, 255, 0.03)', 
+        backdropFilter: 'blur(48px)', 
+        WebkitBackdropFilter: 'blur(48px)', 
+        borderRight: '1px solid rgba(255,255,255,0.08)',
+        boxShadow: 'inset 1px 1px 0 rgba(255,255,255,0.1), 8px 0 32px rgba(0,0,0,0.5)'
+      }}>
       {/* New Chat Button */}
       <div className="p-4">
         <button

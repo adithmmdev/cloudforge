@@ -127,8 +127,8 @@ def run_shadow_verification(db: Session, remediation_action_id: int, project_dir
                 if port_mapping:
                     port = port_mapping.split(":")[-1]
                     try:
-                        r1 = requests.get(f"http://localhost:{port}/", timeout=10)
-                        r2 = requests.get(f"http://localhost:{port}/api/health", timeout=10)
+                        r1 = requests.get(f"http://host.docker.internal:{port}/", timeout=10)
+                        r2 = requests.get(f"http://host.docker.internal:{port}/api/health", timeout=10)
                         if r1.status_code == 200 and r2.status_code < 500:
                             log_test(db, remediation_action_id, "smoke_test", True, "200 OK")
                         else:
@@ -143,7 +143,7 @@ def run_shadow_verification(db: Session, remediation_action_id: int, project_dir
                 if port_mappings and port_mappings[0]:
                     port = port_mappings[0].split(":")[-1]
                     try:
-                        r = requests.get(f"http://localhost:{port}/", timeout=10)
+                        r = requests.get(f"http://host.docker.internal:{port}/", timeout=10)
                         if framework == "react":
                             if r.status_code == 200 and 'id="root"' in r.text:
                                 log_test(db, remediation_action_id, "smoke_test", True, "200 OK")

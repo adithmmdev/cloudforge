@@ -204,15 +204,32 @@ from fastapi import BackgroundTasks
 def trigger_deploy(project_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
-        raise HTTPException(404, "Project not found")
+        raise HTTPException(status_code=404, detail="Project not found")
         
-    dep_type = "mern" if project.framework == "mern" else "single_container"
+    from app.detector.registry import registry
+    project_path = f"/app/uploads/{project.name}"
+    import os
+    if not os.path.exists(project_path):
+        project_path = os.path.join(os.getenv("FIXTURES_DIR", "tests/fixtures"), project.name)
+        
+    adapter, _ = registry.detect(project_path)
+    dep_type = adapter.deployment_type if adapter else "unknown"
+    
     deployment = Deployment(project_id=project.id, deployment_type=dep_type, status="pending")
     db.add(deployment)
     db.commit()
     db.refresh(deployment)
     
-    background_tasks.add_task(run_orchestration_loop, db, deployment.id)
+    def _deploy_bg(dep_id: int):
+        from app.db.session import SessionLocal
+        from app.orchestrator.loop import run_orchestration_loop
+        local_db = SessionLocal()
+        try:
+            run_orchestration_loop(local_db, dep_id)
+        finally:
+            local_db.close()
+            
+    background_tasks.add_task(_deploy_bg, deployment.id)
     return {"deployment_id": deployment.id, "status": "pending"}
 
 @router.get("/{project_id}/deployments")

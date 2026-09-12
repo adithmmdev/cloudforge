@@ -176,7 +176,7 @@ export default function ChatMessage({ message, isStreaming = false }) {
       <div className="flex-1 min-w-0 max-w-[850px]">
         {/* Name Header */}
         <div className="flex items-center gap-2 mb-1.5 ml-1">
-          <span className="font-semibold text-[14px]" style={{ color: '#EDEDEF' }}>Niggex</span>
+          <span className="font-semibold text-[14px]" style={{ color: '#EDEDEF' }}>Nebula</span>
           <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded border"
             style={{ color: '#818cf8', background: 'rgba(94,106,210,0.15)', borderColor: 'rgba(94,106,210,0.3)' }}>
             AI

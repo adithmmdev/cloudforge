@@ -193,28 +193,26 @@ def run_deployment_pipeline(db: Session, deployment_id: int):
                     subprocess.run(["docker", "rm", "-f", container_name])
                     raise RuntimeError(f"Container exited immediately after start. Logs:\n{logs}")
         else:
-            ssh = paramiko.SSHClient()
-            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            ssh.connect(instance.public_ip, username='ubuntu', key_filename=key_path)
-            
             if deployment.deployment_type == 'mern':
                 proj_dir = f"proj_{project.id}_{deployment_id}"
-                ssh.exec_command(f"mkdir -p {proj_dir}")
-                sftp = ssh.open_sftp()
-                sftp.put(os.path.join(project_path, "docker-compose.yml"), f"{proj_dir}/docker-compose.yml")
-                sftp.close()
-                run_command = f"cd {proj_dir} && docker compose up -d"
+                res1 = subprocess.run(["ssh", "-i", key_path, "-o", "StrictHostKeyChecking=no", "-o", "BatchMode=yes", f"ubuntu@{instance.public_ip}", f"mkdir -p {proj_dir}"], capture_output=True, text=True)
+                if res1.returncode != 0:
+                    raise DeploymentError(f"Failed to create project directory: {res1.stderr}", res1.returncode)
+                    
+                res2 = subprocess.run(["scp", "-i", key_path, "-o", "StrictHostKeyChecking=no", "-o", "BatchMode=yes", os.path.join(project_path, "docker-compose.yml"), f"ubuntu@{instance.public_ip}:{proj_dir}/docker-compose.yml"], capture_output=True, text=True)
+                if res2.returncode != 0:
+                    raise DeploymentError(f"Failed to copy docker-compose.yml: {res2.stderr}", res2.returncode)
+                    
+                run_command = ["ssh", "-i", key_path, "-o", "StrictHostKeyChecking=no", "-o", "BatchMode=yes", f"ubuntu@{instance.public_ip}", f"cd {proj_dir} && docker compose up -d"]
+            else:
+                run_command = ["ssh", "-i", key_path, "-o", "StrictHostKeyChecking=no", "-o", "BatchMode=yes", f"ubuntu@{instance.public_ip}", run_command]
 
-            stdin, stdout, stderr = ssh.exec_command(run_command)
-            exit_status = stdout.channel.recv_exit_status()
-            if exit_status != 0:
-                err_msg = stderr.read().decode()
-                ssh.close()
-                raise DeploymentError(f"Failed to launch container: {err_msg}", exit_status)
+            res = subprocess.run(run_command, capture_output=True, text=True)
+            if res.returncode != 0:
+                raise DeploymentError(f"Failed to launch container: {res.stderr}", res.returncode)
                 
             # Clean up old unused images to prevent disk space exhaustion
-            ssh.exec_command("docker image prune -a -f")
-            ssh.close()
+            subprocess.run(["ssh", "-i", key_path, "-o", "StrictHostKeyChecking=no", "-o", "BatchMode=yes", f"ubuntu@{instance.public_ip}", "docker image prune -a -f"], capture_output=True)
         
         logger.info(f"Deployment {deployment_id} completed successfully")
         deployment.status = "deployed"

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, UploadCloud, Settings, Cpu, Activity,
@@ -6,6 +6,11 @@ import {
   Zap, AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { useGSAP } from '@gsap/react';
+import Lenis from 'lenis';
+
 import Dashboard from './pages/Dashboard.jsx';
 import Upload from './pages/Upload.jsx';
 import AWSSetup from './pages/AWSSetup.jsx';
@@ -14,6 +19,8 @@ import SettingsPage from './pages/SettingsPage.jsx';
 import ControlCenter from './pages/ControlCenter.jsx';
 import CopilotPage from './pages/CopilotPage.jsx';
 import AwsCopilotPage from './pages/AwsCopilotPage.jsx';
+
+gsap.registerPlugin(ScrollTrigger);
 
 // ============================================================================
 // CloudForge Logo Mark
@@ -44,7 +51,7 @@ function Sidebar() {
   const navLinks = [
     { to: '/',           icon: LayoutDashboard, label: 'Mission Control', exact: true },
     { to: '/upload',     icon: UploadCloud,     label: 'New Project' },
-    { to: '/copilot',    icon: MessageSquare,   label: 'Niggex AI' },
+    { to: '/copilot',    icon: MessageSquare,   label: 'Nebula AI' },
     { to: '/aws-copilot',icon: MessageSquare,   label: 'AWS Copilot' },
     { to: '/aws-setup',  icon: Cpu,             label: 'AWS Setup' },
     { to: '/control',    icon: Activity,        label: 'Control Center' },
@@ -55,9 +62,11 @@ function Sidebar() {
     <div
       className="fixed left-0 top-0 h-screen w-[220px] flex flex-col z-50"
       style={{
-        background: '#050506',
-        borderRight: '1px solid rgba(255,255,255,0.06)',
-        boxShadow: '4px 0 24px rgba(0,0,0,0.5)',
+        background: 'rgba(255, 255, 255, 0.03)',
+        backdropFilter: 'blur(48px)',
+        WebkitBackdropFilter: 'blur(48px)',
+        borderRight: '1px solid rgba(255,255,255,0.08)',
+        boxShadow: 'inset -1px 0 0 rgba(255,255,255,0.03), inset 1px 1px 0 rgba(255,255,255,0.1), 8px 0 32px rgba(0,0,0,0.5)',
       }}
     >
       {/* Logo */}
@@ -66,10 +75,10 @@ function Sidebar() {
         style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
       >
         <div className="flex items-center gap-2.5">
-          <CFLogo />
+          <img src="/cf-logo.png" alt="CloudForge Logo" className="w-8 h-8 rounded-lg object-contain shadow-[0_0_10px_rgba(94,106,210,0.3)]" />
           <div>
             <span
-              className="block font-mono font-bold text-[14px] tracking-tight"
+              className="block font-sans font-bold text-[14px] tracking-tight"
               style={{ color: '#EDEDEF', letterSpacing: '-0.01em' }}
             >
               CloudForge
@@ -85,7 +94,7 @@ function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 px-2 py-3 space-y-1 overflow-y-auto relative">
         {navLinks.map(({ to, icon: Icon, label, exact }) => (
           <NavLink
             key={to}
@@ -93,34 +102,44 @@ function Sidebar() {
             end={exact}
             className={({ isActive }) =>
               [
-                'flex items-center gap-2.5 px-3 py-2 rounded text-[12.5px] font-medium transition-all duration-150',
-                'relative group',
+                'flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors duration-200',
+                'relative group z-10',
                 isActive
                   ? 'text-[#EDEDEF]'
                   : 'text-[#8A8F98] hover:text-[#EDEDEF]',
               ].join(' ')
             }
-            style={({ isActive }) => ({
-              background: isActive ? 'rgba(94,106,210,0.12)' : 'transparent',
-              border: isActive ? '1px solid rgba(94,106,210,0.2)' : '1px solid transparent',
-            })}
           >
             {({ isActive }) => (
               <>
-                <Icon
-                  size={15}
-                  strokeWidth={isActive ? 2 : 1.75}
-                  style={{ color: isActive ? '#5E6AD2' : 'inherit' }}
-                />
-                {label}
                 {isActive && (
                   <motion.div
-                    layoutId="nav-active"
-                    className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-4 rounded-full"
-                    style={{ background: '#5E6AD2' }}
-                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                    layoutId="sidebar-active"
+                    className="absolute inset-0 rounded-[12px] z-[-1]"
+                    style={{
+                      background: 'linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 100%)',
+                      boxShadow: 'inset 0 1px 2px rgba(255,255,255,0.3), inset 0 -1px 2px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.5)',
+                      backdropFilter: 'blur(20px)',
+                      WebkitBackdropFilter: 'blur(20px)',
+                      border: '1px solid rgba(255,255,255,0.1)'
+                    }}
+                    transition={{ type: 'spring', stiffness: 350, damping: 30 }}
                   />
                 )}
+                {isActive && (
+                  <motion.div
+                    layoutId="sidebar-indicator"
+                    className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-4 rounded-full"
+                    style={{ background: '#5E6AD2' }}
+                    transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+                  />
+                )}
+                <Icon
+                  size={16}
+                  strokeWidth={isActive ? 2 : 1.75}
+                  style={{ color: isActive ? '#818cf8' : 'inherit' }}
+                />
+                {label}
               </>
             )}
           </NavLink>
@@ -186,10 +205,11 @@ function TopHeader() {
     <div
       className="fixed top-0 left-[220px] right-0 h-10 flex items-center px-5 z-40"
       style={{
-        background: 'rgba(5,5,6,0.92)',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
+        background: 'rgba(255, 255, 255, 0.03)',
+        backdropFilter: 'blur(48px)',
+        WebkitBackdropFilter: 'blur(48px)',
+        borderBottom: '1px solid rgba(255,255,255,0.08)',
+        boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.1), 0 4px 24px rgba(0,0,0,0.4)',
       }}
     >
       <div className="flex items-center gap-5" style={{ color: '#8A8F98', fontSize: '11px', fontWeight: 500 }}>
@@ -240,66 +260,19 @@ function TopHeader() {
 // Atmospheric Background
 // ============================================================================
 function AtmosphericBackground() {
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      setMousePos({ x: e.clientX, y: e.clientY });
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
   return (
-    <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden" aria-hidden="true">
-      {/* Base gradient — radial depth */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'radial-gradient(ellipse 80% 60% at 50% 0%, rgba(94,106,210,0.06) 0%, transparent 70%)',
-        }}
-      />
-      {/* Subtle ambient blob — top left */}
-      <motion.div
-        style={{
-          position: 'absolute',
-          top: '-10%',
-          left: '-5%',
-          width: '45vw',
-          height: '45vw',
-          borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(94,106,210,0.04) 0%, transparent 70%)',
-          filter: 'blur(60px)',
-        }}
-        animate={{
-          x: [0, 30, -10, 0],
-          y: [0, -20, 15, 0],
-          scale: [1, 1.05, 0.97, 1],
-        }}
-        transition={{
-          duration: 12,
-          ease: 'easeInOut',
-          repeat: Infinity,
-          repeatType: 'loop',
-        }}
-      />
-      {/* Subtle ambient blob — bottom right */}
-      <motion.div
-        style={{
-          position: 'absolute',
-          bottom: '-10%',
-          right: '-5%',
-          width: '40vw',
-          height: '40vw',
-          borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(56,189,248,0.025) 0%, transparent 70%)',
-          filter: 'blur(80px)',
-        }}
-        animate={{
-          x: [0, -20, 15, 0],
-          y: [0, 20, -10, 0],
-          scale: [1, 0.95, 1.03, 1],
-        }}
-        transition={{
-          duration: 15,
-          ease: 'easeInOut',
-          repeat: Infinity,
-          repeatType: 'loop',
-          delay: 3,
-        }}
-      />
-      {/* Ultra-subtle grid overlay */}
+    <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden" aria-hidden="true" style={{ background: '#050506' }}>
+      {/* Subtle grid */}
       <div
         style={{
           position: 'absolute',
@@ -309,8 +282,31 @@ function AtmosphericBackground() {
             linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px)
           `,
           backgroundSize: '64px 64px',
-          maskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 40%, transparent 100%)',
-          WebkitMaskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 40%, transparent 100%)',
+          maskImage: 'radial-gradient(ellipse 100% 100% at 50% 50%, black 40%, transparent 100%)',
+          WebkitMaskImage: 'radial-gradient(ellipse 100% 100% at 50% 50%, black 40%, transparent 100%)',
+        }}
+      />
+      {/* Spotlight tracking cursor */}
+      <motion.div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '600px',
+          height: '600px',
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(94,106,210,0.08) 0%, rgba(167,139,250,0.03) 40%, transparent 70%)',
+          filter: 'blur(60px)',
+          pointerEvents: 'none',
+        }}
+        animate={{
+          x: mousePos.x - 300,
+          y: mousePos.y - 300,
+        }}
+        transition={{
+          type: 'tween',
+          ease: 'easeOut',
+          duration: 0.15,
         }}
       />
     </div>
@@ -318,12 +314,37 @@ function AtmosphericBackground() {
 }
 
 // ============================================================================
+// ============================================================================
 // Root App
 // ============================================================================
 export default function App() {
+  const containerRef = useRef(null);
+
+  useGSAP(() => {
+    const lenis = new Lenis({
+      duration: 1.2,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      smoothWheel: true,
+    });
+
+    lenis.on('scroll', ScrollTrigger.update);
+
+    gsap.ticker.add((time) => {
+      lenis.raf(time * 1000);
+    });
+
+    gsap.ticker.lagSmoothing(0);
+
+    return () => {
+      lenis.destroy();
+      gsap.ticker.remove(lenis.raf);
+    };
+  }, { scope: containerRef });
+
   return (
     <BrowserRouter>
       <div
+        ref={containerRef}
         className="min-h-screen antialiased"
         style={{
           background: '#050506',

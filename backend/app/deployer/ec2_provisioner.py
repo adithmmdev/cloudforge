@@ -52,14 +52,27 @@ def provision_instance(db: Session, max_instances: int = None, deployment_id: in
     db_instances = db.query(Instance).all()
     db_map = {i.aws_instance_id: i for i in db_instances}
     
+    setup_state = db.query(AWSSetupState).filter_by(setup_status='complete').first()
+    if setup_state:
+        expected_key_name = setup_state.key_pair_name
+    else:
+        expected_key_name = os.getenv('EC2_KEY_PAIR_NAME')
+        
     for aws_id, aws_inst in aws_instances.items():
         state_name = aws_inst['State']['Name']
         pub_ip = aws_inst.get('PublicIpAddress')
+        key_name = aws_inst.get('KeyName')
+        
+        # If the instance has a mismatched key, we mark it as mismatched so we don't use it
+        is_mismatched = bool(expected_key_name and key_name and key_name != expected_key_name)
+        
         if aws_id in db_map:
             db_map[aws_id].status = state_name
             db_map[aws_id].public_ip = pub_ip
+            if is_mismatched:
+                db_map[aws_id].status = 'mismatched_key'
         else:
-            new_inst = Instance(aws_instance_id=aws_id, status=state_name, public_ip=pub_ip)
+            new_inst = Instance(aws_instance_id=aws_id, status='mismatched_key' if is_mismatched else state_name, public_ip=pub_ip)
             db.add(new_inst)
             db_map[aws_id] = new_inst
             
@@ -201,23 +214,45 @@ def _wait_for_readiness(instance: Instance, db: Session, timeout=600):
     if not key_path or not os.path.exists(key_path):
         raise RuntimeError("SSH key path not found for readiness check")
         
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    import subprocess
+    import logging
+    logger = logging.getLogger(__name__)
     
     start = time.time()
+    last_error_stage = "SSH connection"
+    last_stderr = ""
+    
     while time.time() - start < timeout:
-        try:
-            ssh.connect(instance.public_ip, username='ubuntu', key_filename=key_path, timeout=5)
-            stdin, stdout, stderr = ssh.exec_command("cat /home/ubuntu/.cloudforge-bootstrap-done")
-            if stdout.channel.recv_exit_status() == 0:
-                stdin, stdout, stderr = ssh.exec_command("docker info")
-                if stdout.channel.recv_exit_status() == 0:
-                    ssh.close()
-                    return
-            ssh.close()
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"SSH readiness check failed: {e}")
-        time.sleep(5)
+        cmd_ssh = ["ssh", "-i", key_path, "-o", "StrictHostKeyChecking=no", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", f"ubuntu@{instance.public_ip}", "echo 'ssh_ready'"]
+        res_ssh = subprocess.run(cmd_ssh, capture_output=True, text=True)
         
-    raise RuntimeError("Timeout waiting for EC2 readiness (bootstrap/docker)")
+        if res_ssh.returncode != 0:
+            if "Permission denied" in res_ssh.stderr:
+                last_error_stage = "SSH authentication failed (wrong key pair or permissions)"
+            else:
+                last_error_stage = "SSH port unavailable or timed out"
+            last_stderr = res_ssh.stderr.strip()
+            time.sleep(5)
+            continue
+            
+        cmd_done = ["ssh", "-i", key_path, "-o", "StrictHostKeyChecking=no", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", f"ubuntu@{instance.public_ip}", "cat /home/ubuntu/.cloudforge-bootstrap-done"]
+        res_done = subprocess.run(cmd_done, capture_output=True, text=True)
+        
+        if res_done.returncode != 0:
+            last_error_stage = "EC2 bootstrap script not finished"
+            last_stderr = res_done.stderr.strip()
+            time.sleep(5)
+            continue
+            
+        cmd_docker = ["ssh", "-i", key_path, "-o", "StrictHostKeyChecking=no", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", f"ubuntu@{instance.public_ip}", "docker info"]
+        res_docker = subprocess.run(cmd_docker, capture_output=True, text=True)
+        
+        if res_docker.returncode != 0:
+            last_error_stage = "Docker daemon unavailable"
+            last_stderr = res_docker.stderr.strip()
+            time.sleep(5)
+            continue
+            
+        return
+        
+    raise RuntimeError(f"Timeout waiting for EC2 readiness. Stuck at: {last_error_stage}. Last error: {last_stderr}")

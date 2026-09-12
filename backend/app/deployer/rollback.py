@@ -1,6 +1,5 @@
 import os
 import subprocess
-import paramiko
 from sqlalchemy.orm import Session
 from app.models.deployment import Deployment
 from app.models.container import Container
@@ -21,14 +20,12 @@ def trigger_rollback(db: Session, deployment_id: int):
     if not project:
         raise ValueError("Project not found")
     
-    # Wait for the status to be set properly before fetching prev
     time.sleep(1)
     
-    # Find previous successful deployment
     prev_deployment = db.query(Deployment).filter(
         Deployment.project_id == failed_deployment.project_id,
         Deployment.id < deployment_id,
-        Deployment.status == 'live'
+        Deployment.status.in_(['live', 'deployed'])
     ).order_by(Deployment.id.desc()).first()
     
     if not prev_deployment:
@@ -42,9 +39,8 @@ def trigger_rollback(db: Session, deployment_id: int):
     setup_state = db.query(AWSSetupState).filter_by(setup_status='complete').first()
     key_path = setup_state.ssh_key_path if setup_state else os.getenv("EC2_SSH_KEY_PATH", "keys/cloudforge-key.pem")
     
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect(instance.public_ip, username='ubuntu', key_filename=key_path)
+    def run_ssh(cmd):
+        return subprocess.run(["ssh", "-i", key_path, "-o", "StrictHostKeyChecking=no", "-o", "BatchMode=yes", f"ubuntu@{instance.public_ip}", cmd], capture_output=True, text=True)
     
     try:
         is_local = os.getenv("LOCAL_MODE", "false").lower() == "true"
@@ -53,27 +49,25 @@ def trigger_rollback(db: Session, deployment_id: int):
             
             if is_local:
                 cwd = f"/app/uploads/{project.name}"
-
                 subprocess.run(["docker", "compose", "-p", f"cloudforge-{project.id}-{deployment_id}", "down"], cwd=cwd)
-                # We can't easily jump to a previous directory in local mode unless it was backed up
-                # We will attempt to use the previous deployment id if we stored it
             else:
-                ssh.exec_command(f"cd proj_{project.id}_{deployment_id} && docker compose down")
+                res = run_ssh(f"cd proj_{project.id}_{deployment_id} && docker compose down")
+                if res.returncode != 0:
+                    logger.warning(f"Failed to rollback deployment {deployment_id} containers: {res.stderr}")
                 
                 prev_dir = f"proj_{project.id}_{prev_deployment.id}"
-                stdin, stdout, stderr = ssh.exec_command(f"cd {prev_dir} && docker compose up -d")
-                if stdout.channel.recv_exit_status() != 0:
-                    raise RuntimeError(f"Rollback compose up failed: {stderr.read().decode()}")
+                res = run_ssh(f"cd {prev_dir} && docker compose up -d")
+                if res.returncode != 0:
+                    raise RuntimeError(f"Rollback compose up failed: {res.stderr}")
                 
         else:
             logger.info("Rolling back single container deployment")
             if is_local:
-
                 subprocess.run(["docker", "stop", f"proj_{project.id}_{deployment_id}"])
                 subprocess.run(["docker", "rm", "-f", f"proj_{project.id}_{deployment_id}"])
             else:
-                ssh.exec_command(f"docker stop proj_{project.id}_{deployment_id}")
-                ssh.exec_command(f"docker rm -f proj_{project.id}_{deployment_id}")
+                run_ssh(f"docker stop proj_{project.id}_{deployment_id}")
+                run_ssh(f"docker rm -f proj_{project.id}_{deployment_id}")
             
             if not prev_deployment.containers:
                 raise RuntimeError("Previous deployment has no containers")
@@ -84,15 +78,16 @@ def trigger_rollback(db: Session, deployment_id: int):
             
             run_command = f"docker run -d -p {port}:8000 --memory=256m --cpus=0.5 --pids-limit=100 --name proj_{project.id}_{prev_deployment.id}_rollback {tag}"
             if is_local:
-
                 subprocess.run(run_command.split())
             else:
-                stdin, stdout, stderr = ssh.exec_command(run_command)
-                if stdout.channel.recv_exit_status() != 0:
-                    raise RuntimeError(f"Rollback run failed: {stderr.read().decode()}")
+                res = run_ssh(run_command)
+                if res.returncode != 0:
+                    raise RuntimeError(f"Rollback run failed: {res.stderr}")
                 
         failed_deployment.status = 'rolled_back'
         db.commit()
         return True
-    finally:
-        ssh.close()
+    except Exception as e:
+        import traceback
+        logger.error(f"Error during rollback of {deployment_id}: {e}\n{traceback.format_exc()}")
+        return False

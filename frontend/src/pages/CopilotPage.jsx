@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import {
   BrainCircuit, AlertTriangle, Loader2, Sparkles, ChevronDown, CheckCircle2, Terminal
 } from 'lucide-react';
@@ -7,6 +8,7 @@ import SessionSidebar from '../components/copilot/SessionSidebar';
 import ChatMessage from '../components/copilot/ChatMessage';
 import ChatInput from '../components/copilot/ChatInput';
 import QuickActions from '../components/copilot/QuickActions';
+import NebulaIntro from '../components/copilot/NebulaIntro';
 
 function ThinkingIndicator({ status, message, toolsUsed }) {
   const steps = [
@@ -107,6 +109,7 @@ function ProjectSelector({ projects, selectedId, onChange }) {
 }
 
 export default function CopilotPage() {
+  const [introShown, setIntroShown] = useState(false);
   const [projects, setProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState(
     parseInt(localStorage.getItem('copilot_project_id')) || null
@@ -298,8 +301,18 @@ export default function CopilotPage() {
 
   const hasMessages = messages.length > 0 || (isStreaming && streamSessionId === activeSessionId);
 
+  if (!introShown) {
+    return <NebulaIntro onComplete={() => setIntroShown(true)} />;
+  }
+
   return (
-    <div className="h-[calc(100vh-40px)] flex overflow-hidden w-full" style={{ background: '#050506' }}>
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+      className="h-[calc(100vh-40px)] flex overflow-hidden w-full"
+      style={{ background: '#050506' }}
+    >
       
       <SessionSidebar
         sessions={sessions}
@@ -311,8 +324,8 @@ export default function CopilotPage() {
       />
 
       <div className="flex-1 flex flex-col h-full overflow-hidden relative items-center w-full" style={{ background: '#050506' }}>
-        <div className="flex-shrink-0 h-[60px] flex items-center justify-center px-6 z-10 w-full backdrop-blur-md"
-          style={{ background: 'rgba(5,5,6,0.7)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="flex-shrink-0 h-[60px] flex items-center justify-center px-6 z-10 w-full"
+          style={{ background: 'rgba(255, 255, 255, 0.03)', backdropFilter: 'blur(48px)', WebkitBackdropFilter: 'blur(48px)', borderBottom: '1px solid rgba(255,255,255,0.08)', boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.1)' }}>
           <div className="flex items-center justify-between w-full max-w-5xl">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-[10px] flex items-center justify-center shadow-sm"
@@ -321,7 +334,7 @@ export default function CopilotPage() {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <p className="text-[15px] font-semibold leading-none" style={{ color: '#EDEDEF' }}>Niggex AI</p>
+                  <p className="text-[15px] font-semibold leading-none" style={{ color: '#EDEDEF' }}>Nebula AI</p>
                 </div>
               </div>
             </div>
@@ -412,7 +425,8 @@ export default function CopilotPage() {
           </div>
         </div>
 
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-white via-white to-transparent pt-10 pb-6 px-4 pointer-events-none flex justify-center w-full">
+        <div className="absolute bottom-0 left-0 right-0 pt-10 pb-6 px-4 pointer-events-none flex justify-center w-full"
+          style={{ background: 'linear-gradient(to top, #050506 50%, transparent 100%)' }}>
           <div className="pointer-events-auto w-full max-w-4xl">
             <ChatInput 
               onSend={handleSend} 
@@ -423,6 +437,6 @@ export default function CopilotPage() {
         </div>
 
       </div>
-    </div>
+    </motion.div>
   );
 }
