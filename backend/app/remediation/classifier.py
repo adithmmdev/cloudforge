@@ -4,6 +4,7 @@ PATTERNS = [
     (r"ModuleNotFoundError: No module named '(\w+)'", "missing_python_dependency"),
     (r"Cannot find module '((?:\.|\/).*)'", "missing_build_step"),
     (r"Cannot find module '([^']+)'", "missing_node_dependency"),
+    (r"(?i)(failed to read dockerfile|open Dockerfile: no such file or directory)", "missing_dockerfile"),
     (r"EADDRINUSE", "port_conflict"),
     (r"(exec format error|no matching manifest for)", "wrong_base_image_arch"),
     (r"OOMKilled: true", "out_of_memory"),
@@ -11,7 +12,8 @@ PATTERNS = [
     (r"(MongoNetworkError|ECONNREFUSED .*27017)", "db_connection_failed"),
     (r"npm ERR! code ERR_SOCKET_TIMEOUT", "build_network_error"),
     (r"npm error notarget No matching version found for (@?[a-zA-Z0-9_\-\.\/]+)", "invalid_package_version"),
-    (r"container exits within 2s, no matching CMD found", "missing_or_wrong_start_command")
+    (r"container exits within 2s, no matching CMD found", "missing_or_wrong_start_command"),
+    (r"(?i)(timeout|unreachable|connection timed out)", "timeout_or_unreachable")
 ]
 
 def classify_error(logs_or_status: str) -> dict:

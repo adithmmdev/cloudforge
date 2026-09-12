@@ -1,4 +1,4 @@
-import subprocess
+﻿import subprocess
 import time
 import requests
 import os
@@ -25,9 +25,13 @@ def run_shadow_verification(db: Session, remediation_action_id: int, project_dir
     container_name = None
     
     try:
-        if deployment_type == "mern":
+        if framework == "mern":
             from app.build_service.builder import materialize_dependencies
             materialize_dependencies(project_dir, "mern")
+            
+            # Explicitly log generic build as SKIPPED for multi-container
+            log_test(db, remediation_action_id, "build", True, "SKIPPED - MERN is a multi-container project")
+            
             # For MERN, we need to build client and server with limits, then update compose or just use compose build?
             # Actually, we can just run docker build manually for client and server.
             for svc in ["client", "server"]:
@@ -105,7 +109,7 @@ def run_shadow_verification(db: Session, remediation_action_id: int, project_dir
         # Wait for container to settle
         time.sleep(15)
         
-        if deployment_type == "mern":
+        if framework == "mern":
             res = subprocess.run(["docker", "compose", "-p", f"shadow_{remediation_action_id}", "ps", "-q"], cwd=project_dir, capture_output=True, text=True)
             if not res.stdout.strip():
                 log_test(db, remediation_action_id, "stay_running_15s", False, "Containers exited")
@@ -121,7 +125,7 @@ def run_shadow_verification(db: Session, remediation_action_id: int, project_dir
                 log_test(db, remediation_action_id, "stay_running_15s", True, "Running")
                 
         if success:
-            if deployment_type == "mern":
+            if framework == "mern":
                 res = subprocess.run(["docker", "compose", "-p", f"shadow_{remediation_action_id}", "port", "client", "80"], cwd=project_dir, capture_output=True, text=True)
                 port_mapping = res.stdout.strip()
                 if port_mapping:
@@ -165,7 +169,7 @@ def run_shadow_verification(db: Session, remediation_action_id: int, project_dir
         success = False
         log_test(db, remediation_action_id, "exception", False, str(e))
     finally:
-        if deployment_type == "mern":
+        if framework == "mern":
             subprocess.run(["docker", "compose", "-p", f"shadow_{remediation_action_id}", "down", "-v", "--remove-orphans"], cwd=project_dir, capture_output=True)
         elif container_name:
             subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)

@@ -13,21 +13,28 @@ const STEP_LABELS = {
 
 // ── Test row ──────────────────────────────────────────────────
 function TestRow({ test }) {
-  const [expanded, setExpanded] = useState(!test.passed);
+  const isSkipped = test.output && (test.output.startsWith('SKIPPED') || test.output.startsWith('NOT_APPLICABLE'));
+  const isFailed = !test.passed && !isSkipped;
+  const [expanded, setExpanded] = useState(isFailed);
 
   return (
     <>
       <tr
         style={{
           borderBottom: '1px solid rgba(255,255,255,0.05)',
-          background: !test.passed ? 'rgba(244,63,94,0.04)' : 'transparent',
+          background: isFailed ? 'rgba(244,63,94,0.04)' : 'transparent',
         }}
       >
         <td className="px-4 py-2.5 font-mono text-xs" style={{ color: '#EDEDEF' }}>
           {STEP_LABELS[test.test_name] || test.test_name}
         </td>
         <td className="px-4 py-2.5">
-          {test.passed ? (
+          {isSkipped ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold border"
+              style={{ color: '#9ca3af', background: 'rgba(156,163,175,0.1)', borderColor: 'rgba(156,163,175,0.2)' }}>
+              <div className="w-3 h-3 rounded-full border-2 border-gray-400 border-dashed" /> SKIPPED
+            </span>
+          ) : test.passed ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold border"
               style={{ color: '#4ade80', background: 'rgba(34,197,94,0.1)', borderColor: 'rgba(34,197,94,0.2)' }}>
               <CheckCircle className="w-3 h-3" /> PASS
@@ -132,7 +139,10 @@ export default function ShadowVerificationTab({ deploymentId, shadowTests, shado
   ];
 
   const currentStepIdx = STEPS.findIndex(s => !s.done);
-  const failedTests    = liveMerged.filter(t => !t.passed);
+  const failedTests = liveMerged.filter(t => {
+    const isSkipped = t.output && (t.output.startsWith('SKIPPED') || t.output.startsWith('NOT_APPLICABLE'));
+    return !t.passed && !isSkipped;
+  });
 
   // ── Dark sandbox state styles ──────────────────────────────
   const sandboxStyle = {
@@ -317,7 +327,7 @@ export default function ShadowVerificationTab({ deploymentId, shadowTests, shado
           </h4>
           <div className="space-y-2">
             {groupedHistory.slice(1).map(([actionId, tests]) => {
-              const allPassed = tests.every(t => t.passed);
+              const allPassed = tests.every(t => t.passed || (t.output && (t.output.startsWith('SKIPPED') || t.output.startsWith('NOT_APPLICABLE'))));
               return (
                 <div
                   key={actionId}

@@ -45,3 +45,15 @@ def test_build_network_error():
 def test_unclassified():
     res = classify_error("Some random unknown error occurred")
     assert res["error_class"] == "unclassified"
+
+def test_missing_dockerfile_classification():
+    from app.remediation.classifier import classify_error
+    error_log = "ERROR: failed to solve: failed to read dockerfile: open Dockerfile: no such file or directory"
+    result = classify_error(error_log)
+    assert result["error_class"] == "missing_dockerfile"
+
+def test_timeout_classification():
+    from app.remediation.classifier import classify_error
+    error_log = "Error: connection timed out while attempting to reach remote host"
+    result = classify_error(error_log)
+    assert result["error_class"] == "timeout_or_unreachable"

@@ -1,6 +1,8 @@
 import logging
 import os
 import shutil
+import time
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.models.deployment import Deployment
 from app.models.project import Project
@@ -33,6 +35,7 @@ def run_orchestration_loop(db: Session, deployment_id: int):
     
     try:
         while attempt_number <= MAX_REMEDIATION_ATTEMPTS:
+            attempt_start_time = datetime.now(timezone.utc)
             deployment = db.query(Deployment).filter(Deployment.id == deployment_id).first()
             if not deployment or deployment.status == "cancelled":
                 logger.info(f"Deployment {deployment_id} cancelled. Stopping orchestration loop.")
@@ -93,7 +96,16 @@ def run_orchestration_loop(db: Session, deployment_id: int):
                 
                 mode = autonomy.mode if autonomy else "approve_each"
                 
-                classification = classify_error(error_msg)
+                recent_logs = db.query(_SE).filter(
+                    _SE.deployment_id == deployment_id,
+                    _SE.stage.in_(['log', 'failed']),
+                    _SE.created_at >= attempt_start_time
+                ).order_by(_SE.created_at.desc()).limit(100).all()
+                
+                log_text = "\n".join([l.detail for l in reversed(recent_logs) if l.detail])
+                error_msg_with_logs = f"{error_msg}\nRecent Logs:\n{log_text}" if log_text else error_msg
+                classification = classify_error(error_msg_with_logs)
+                
                 framework = project.framework
                 deployment_type = "mern" if framework == "mern" else "single_container"
                 service = "client" if framework == "mern" else "app" 
