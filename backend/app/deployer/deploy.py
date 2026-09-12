@@ -116,35 +116,18 @@ def run_deployment_pipeline(db: Session, deployment_id: int):
             key_path = setup_state.ssh_key_path if setup_state else os.getenv("EC2_SSH_KEY_PATH", "keys/cloudforge-key.pem")
             
             for image_tag in image_tags:
+
                 logger.info(f"Deployment {deployment_id}: Transferring image {image_tag}")
-                # Use scp for reliable transfer instead of pipe over ssh (fixes Docker Desktop MTU stalls)
-                tar_file = f"/tmp/{image_tag.replace(':', '_')}.tar"
-                save_cmd = ["docker", "save", "-o", tar_file, image_tag]
-                res = subprocess.run(save_cmd, capture_output=True)
-                if res.returncode != 0:
-                    raise DeploymentError(f"Docker save failed: {res.stderr.decode()}", res.returncode)
-                
-                # Verify local file size
-                if not os.path.exists(tar_file) or os.path.getsize(tar_file) < 1000:
-                    raise DeploymentError(f"Docker save produced empty or missing file: {tar_file}")
-                
-                remote_tar = f"/home/ubuntu/{image_tag.replace(':', '_')}.tar"
-                scp_cmd = ["scp", "-O", "-o", "StrictHostKeyChecking=no", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "-i", key_path, tar_file, f"ubuntu@{instance.public_ip}:{remote_tar}"]
-                ssh_load_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "-i", key_path, f"ubuntu@{instance.public_ip}", f"docker load -i {remote_tar} && rm -f {remote_tar}"]
+                # Use compressed pipe for reliable transfer and to bypass SCP connection drops
+                transfer_cmd = f"docker save {image_tag} | gzip -c | ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -i {key_path} ubuntu@{instance.public_ip} 'gunzip -c | docker load'"
                 
                 transfer_success = False
                 last_err = ""
                 for retry in range(3):
-                    res_scp = subprocess.run(scp_cmd, capture_output=True)
-                    if res_scp.returncode != 0:
-                        last_err = f"SCP failed: {res_scp.stderr.decode()}"
-                        time.sleep(2)
-                        continue
-                    
-                    res_load = subprocess.run(ssh_load_cmd, capture_output=True)
-                    if res_load.returncode != 0:
-                        last_err = f"Docker load failed for {remote_tar}: {res_load.stderr.decode()}"
-                        time.sleep(2)
+                    res_transfer = subprocess.run(transfer_cmd, shell=True, capture_output=True)
+                    if res_transfer.returncode != 0:
+                        last_err = f"Transfer failed for {image_tag}: {res_transfer.stderr.decode()}"
+                        time.sleep(5)
                         continue
                     
                     transfer_success = True
@@ -152,9 +135,6 @@ def run_deployment_pipeline(db: Session, deployment_id: int):
                     
                 if not transfer_success:
                     raise DeploymentError(last_err)
-                
-                # Clean up local tar file
-                os.remove(tar_file)
                 
         # Step 4: Launch Container
         logger.info(f"Deployment {deployment_id}: Launching container")
