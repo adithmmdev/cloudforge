@@ -15,11 +15,22 @@ from app.aws_copilot.router import router as aws_copilot_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialization logic here
+    # Cleanup interrupted deployments
+    from app.db.session import SessionLocal
+    from app.models.deployment import Deployment
+    from app.models.stage_event import StageEvent
+    
+    db = SessionLocal()
+    stuck_deployments = db.query(Deployment).filter(Deployment.status.in_(['pending', 'building', 'deploying'])).all()
+    for d in stuck_deployments:
+        d.status = 'failed'
+        db.add(StageEvent(deployment_id=d.id, stage='error', detail='Deployment interrupted by server restart/crash.'))
+    db.commit()
+    db.close()
+
     from app.metrics.poller import start_metrics_poller
     start_metrics_poller()
     yield
-    # Cleanup logic here
 
 app = FastAPI(title="CloudForge API", lifespan=lifespan)
 

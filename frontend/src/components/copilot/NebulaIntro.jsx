@@ -1,313 +1,306 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-/* ──────────────────────────────────────────────────
-   NebulaIntro — cinematic splash animation that plays
-   once each time the user opens the Nebula AI page.
-   Calls onComplete() when done so the chat is revealed.
-────────────────────────────────────────────────── */
+// --- Particle Generator ---
+function useParticles(count) {
+  return useMemo(() => {
+    return Array.from({ length: count }).map((_, i) => {
+      // Random starting angles and radius
+      const angle = Math.random() * 360;
+      const radius = 90 + Math.random() * 140; // distance from center
+      const size = 1 + Math.random() * 2.5;
+      const duration = 5 + Math.random() * 8;
+      const delay = Math.random() * 3;
+      
+      // Calculate start and end coordinates based on an expanding spiral
+      const rad = angle * (Math.PI / 180);
+      const startX = Math.cos(rad) * (radius * 0.5);
+      const startY = Math.sin(rad) * (radius * 0.5);
+      const endX = Math.cos(rad + Math.PI/4) * radius;
+      const endY = Math.sin(rad + Math.PI/4) * radius;
 
-// ── SVG Logo ──
-function NebulaIcon({ size = 72 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 72 72" fill="none" aria-hidden="true">
-      <ellipse cx="36" cy="36" rx="32" ry="10"
-        stroke="rgba(148,163,251,0.35)" strokeWidth="1" />
-      <ellipse cx="36" cy="36" rx="32" ry="10"
-        stroke="rgba(167,139,250,0.25)" strokeWidth="1"
-        transform="rotate(60 36 36)" />
-      <ellipse cx="36" cy="36" rx="32" ry="10"
-        stroke="rgba(94,106,210,0.30)" strokeWidth="1"
-        transform="rotate(120 36 36)" />
-      <circle cx="36" cy="36" r="10" fill="url(#nebCore)" filter="url(#nebGlow)" />
-      <circle cx="36" cy="36" r="4" fill="white" opacity="0.9" />
-      <circle cx="68" cy="36" r="2.5" fill="rgba(148,163,251,0.85)" />
-      <circle cx="4"  cy="36" r="2.5" fill="rgba(167,139,250,0.85)" />
-      <circle cx="36" cy="4"  r="2"   fill="rgba(94,106,210,0.75)" />
-      <circle cx="36" cy="68" r="2"   fill="rgba(94,106,210,0.75)" />
-      <defs>
-        <radialGradient id="nebCore" cx="50%" cy="50%" r="50%">
-          <stop offset="0%"   stopColor="#818cf8" />
-          <stop offset="60%"  stopColor="#5E6AD2" />
-          <stop offset="100%" stopColor="rgba(94,106,210,0)" />
-        </radialGradient>
-        <filter id="nebGlow" x="-60%" y="-60%" width="220%" height="220%">
-          <feGaussianBlur stdDeviation="5" result="b" />
-          <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-        </filter>
-      </defs>
-    </svg>
-  );
+      return { startX, startY, endX, endY, size, duration, delay, id: i };
+    });
+  }, [count]);
 }
 
-// ── Letter-by-letter reveal ──
-function AnimatedText({ text, delay = 0, style = {} }) {
-  return (
-    <span style={style} aria-label={text}>
-      {text.split('').map((char, i) => (
-        <motion.span
-          key={i}
-          initial={{ opacity: 0, y: 22, filter: 'blur(9px)' }}
-          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-          transition={{
-            duration: 0.52,
-            delay: delay + i * 0.048,
-            ease: [0.16, 1, 0.3, 1],
-          }}
-          style={{ display: 'inline-block', whiteSpace: char === ' ' ? 'pre' : 'normal' }}
-        >
-          {char}
-        </motion.span>
-      ))}
-    </span>
-  );
-}
-
-// ── Single orbiting dot ──
-function OrbitParticle({ angle, radius, size, delay, color, duration }) {
-  const rad = (a) => (a * Math.PI) / 180;
-  const x0 = Math.cos(rad(angle))         * radius;
-  const y0 = Math.sin(rad(angle))         * radius * 0.35;
-  const x1 = Math.cos(rad(angle + 360))   * radius;
-  const y1 = Math.sin(rad(angle + 360))   * radius * 0.35;
-  return (
-    <motion.div
-      style={{
-        position: 'absolute',
-        width: size, height: size,
-        borderRadius: '50%',
-        background: color,
-        top: '50%', left: '50%',
-        marginTop: -size / 2, marginLeft: -size / 2,
-        boxShadow: `0 0 ${size * 2.5}px ${color}`,
-        zIndex: 5,
-      }}
-      animate={{ x: [x0, x1], y: [y0, y1] }}
-      transition={{ duration, repeat: Infinity, ease: 'linear', delay }}
-    />
-  );
-}
-
-// ── Main export ──
 export default function NebulaIntro({ onComplete }) {
   const [visible, setVisible] = useState(true);
   const timerRef = useRef(null);
+  
+  // 40 particles for a dense cosmic dust field
+  const particles = useParticles(40);
 
   useEffect(() => {
-    // Respect reduced-motion preference
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       onComplete();
       return;
     }
     timerRef.current = setTimeout(() => {
       setVisible(false);
-      setTimeout(onComplete, 650);
-    }, 2900);
+      setTimeout(onComplete, 900); // Wait for exit animation
+    }, 4200);
     return () => clearTimeout(timerRef.current);
   }, [onComplete]);
 
   const skip = () => {
     clearTimeout(timerRef.current);
     setVisible(false);
-    setTimeout(onComplete, 620);
+    setTimeout(onComplete, 800);
   };
-
-  const particles = [
-    { angle: 0,   radius: 112, size: 5,   delay: 0,    color: 'rgba(148,163,251,0.9)', duration: 4.0 },
-    { angle: 90,  radius: 112, size: 3.5, delay: 0.5,  color: 'rgba(167,139,250,0.85)', duration: 4.0 },
-    { angle: 180, radius: 112, size: 4,   delay: 0,    color: 'rgba(94,106,210,0.9)',   duration: 4.0 },
-    { angle: 270, radius: 112, size: 3,   delay: 1.0,  color: 'rgba(196,181,253,0.75)', duration: 4.0 },
-    { angle: 40,  radius: 148, size: 3,   delay: 0.2,  color: 'rgba(129,140,248,0.6)',  duration: 5.6 },
-    { angle: 130, radius: 148, size: 2.5, delay: 0.8,  color: 'rgba(167,139,250,0.5)',  duration: 5.6 },
-    { angle: 220, radius: 148, size: 3,   delay: 0.4,  color: 'rgba(94,106,210,0.6)',   duration: 5.6 },
-    { angle: 310, radius: 148, size: 2,   delay: 1.2,  color: 'rgba(148,163,251,0.5)',  duration: 5.6 },
-  ];
 
   return (
     <AnimatePresence>
       {visible && (
         <motion.div
-          key="nebula-intro"
+          key="nebula-intro-pro-max"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          exit={{ opacity: 0, scale: 1.06, filter: 'blur(12px)' }}
-          transition={{ duration: 0.62, ease: [0.16, 1, 0.3, 1] }}
+          exit={{ opacity: 0, scale: 1.08, filter: 'blur(20px)' }}
+          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
           style={{
             position: 'fixed', inset: 0, zIndex: 9999,
             display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center',
-            background: 'radial-gradient(ellipse 80% 60% at 50% 50%, rgba(18,14,42,1) 0%, #020203 100%)',
+            background: '#020204',
             overflow: 'hidden',
           }}
         >
-          {/* ── ambient glow blobs ── */}
-          <div style={{
-            position: 'absolute', width: 760, height: 760, borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(94,106,210,0.11) 0%, transparent 70%)',
-            filter: 'blur(90px)', top: '50%', left: '50%',
-            transform: 'translate(-50%,-50%)', pointerEvents: 'none',
-          }} />
+          {/* Ambient Cosmic Mist */}
           <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1, scale: [1, 1.05, 1], rotate: [0, 5, 0] }}
+            transition={{ duration: 6, ease: "easeInOut", repeat: Infinity }}
             style={{
-              position: 'absolute', width: 420, height: 420, borderRadius: '50%',
-              background: 'radial-gradient(circle, rgba(167,139,250,0.09) 0%, transparent 70%)',
-              filter: 'blur(65px)', top: '50%', left: '50%',
-              transform: 'translate(-50%,-50%)', pointerEvents: 'none',
+              position: 'absolute', width: '90vw', height: '90vw',
+              maxWidth: 900, maxHeight: 900,
+              background: 'radial-gradient(ellipse at center, rgba(94,106,210,0.12) 0%, rgba(167,139,250,0.06) 40%, transparent 70%)',
+              filter: 'blur(100px)',
+              pointerEvents: 'none',
+              top: '50%', left: '50%',
+              transform: 'translate(-50%, -50%)'
             }}
-            animate={{ scale: [1, 1.22, 1], opacity: [0.5, 1, 0.5] }}
-            transition={{ duration: 3.6, repeat: Infinity, ease: 'easeInOut' }}
           />
 
-          {/* ── subtle grid ── */}
-          <div style={{
-            position: 'absolute', inset: 0, pointerEvents: 'none',
-            backgroundImage: 'linear-gradient(rgba(255,255,255,0.013) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.013) 1px, transparent 1px)',
-            backgroundSize: '52px 52px',
-            maskImage: 'radial-gradient(ellipse 68% 68% at 50% 50%, black 40%, transparent 100%)',
-            WebkitMaskImage: 'radial-gradient(ellipse 68% 68% at 50% 50%, black 40%, transparent 100%)',
-          }} />
-
-          {/* ── icon + orbit system ── */}
-          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {/* Orbit ring 1 */}
-            <motion.div
-              style={{
-                position: 'absolute',
-                width: 235, height: 84, borderRadius: '50%',
-                border: '1px solid rgba(148,163,251,0.2)',
-                top: '50%', left: '50%',
-                marginTop: -42, marginLeft: -117.5,
-              }}
-              initial={{ opacity: 0, scale: 0.3 }}
-              animate={{ opacity: 1, scale: 1, rotate: [0, 360] }}
-              transition={{
-                opacity: { duration: 0.5, delay: 0.3 },
-                scale:   { duration: 0.5, delay: 0.3 },
-                rotate:  { duration: 8, repeat: Infinity, ease: 'linear' },
-              }}
-            />
-            {/* Orbit ring 2 */}
-            <motion.div
-              style={{
-                position: 'absolute',
-                width: 304, height: 110, borderRadius: '50%',
-                border: '1px solid rgba(94,106,210,0.14)',
-                top: '50%', left: '50%',
-                marginTop: -55, marginLeft: -152,
-              }}
-              initial={{ opacity: 0, scale: 0.3 }}
-              animate={{ opacity: 1, scale: 1, rotate: [60, 420] }}
-              transition={{
-                opacity: { duration: 0.5, delay: 0.42 },
-                scale:   { duration: 0.5, delay: 0.42 },
-                rotate:  { duration: 12, repeat: Infinity, ease: 'linear' },
-              }}
-            />
-
-            {/* Orbit particles */}
-            {particles.map((p, i) => <OrbitParticle key={i} {...p} />)}
-
-            {/* Core icon */}
-            <motion.div
-              initial={{ scale: 0.15, opacity: 0, filter: 'blur(28px)' }}
-              animate={{ scale: 1,    opacity: 1, filter: 'blur(0px)' }}
-              transition={{ duration: 0.95, delay: 0.12, ease: [0.16, 1, 0.3, 1] }}
-              style={{ position: 'relative', zIndex: 10 }}
-            >
-              <NebulaIcon size={74} />
-            </motion.div>
-          </div>
-
-          {/* ── text block ── */}
-          <div style={{ marginTop: 36, textAlign: 'center', position: 'relative', zIndex: 10 }}>
-            <div style={{
-              fontSize: 40, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1,
-              fontFamily: 'Inter, system-ui, sans-serif',
-              display: 'flex', alignItems: 'baseline', gap: 10, justifyContent: 'center',
-            }}>
-              <AnimatedText
-                text="Nebula"
-                delay={0.55}
-                style={{ color: '#EDEDEF' }}
-              />
-              <AnimatedText
-                text="AI"
-                delay={0.94}
+          {/* Organic Particle Field */}
+          <div style={{ position: 'absolute', top: '50%', left: '50%', zIndex: 5, pointerEvents: 'none' }}>
+            {particles.map(p => (
+              <motion.div
+                key={p.id}
+                initial={{ opacity: 0, x: p.startX, y: p.startY, scale: 0 }}
+                animate={{ 
+                  opacity: [0, Math.random() * 0.6 + 0.4, 0], 
+                  x: [p.startX, p.endX], 
+                  y: [p.startY, p.endY], 
+                  scale: [0, 1, 0] 
+                }}
+                transition={{
+                  duration: p.duration,
+                  repeat: Infinity,
+                  delay: p.delay,
+                  ease: "easeInOut"
+                }}
                 style={{
-                  background: 'linear-gradient(135deg, #818cf8 0%, #a78bfa 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
+                  position: 'absolute',
+                  width: p.size, height: p.size,
+                  borderRadius: '50%',
+                  background: '#fff',
+                  boxShadow: '0 0 8px 1px rgba(167,139,250,0.8)',
                 }}
               />
-            </div>
+            ))}
+          </div>
+
+          {/* Central Glassmorphic Fluid Orb */}
+          <div style={{ position: 'relative', width: 140, height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
+            
+            {/* The Fluid Mask */}
+            <motion.div
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 1.4, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+              style={{
+                position: 'absolute',
+                width: 130, height: 130,
+                borderRadius: '50%',
+                overflow: 'hidden',
+                background: 'rgba(10,10,15,0.4)',
+                boxShadow: '0 0 40px rgba(94,106,210,0.3)',
+              }}
+            >
+              {/* Fluid Core 1: Deep Blue */}
+              <motion.div
+                animate={{ rotate: 360, scale: [1, 1.2, 1] }}
+                transition={{ rotate: { duration: 8, repeat: Infinity, ease: 'linear' }, scale: { duration: 4, repeat: Infinity, ease: 'easeInOut' } }}
+                style={{
+                  position: 'absolute', width: '120%', height: '120%',
+                  top: '-10%', left: '-10%',
+                  background: 'radial-gradient(circle, #5E6AD2 0%, transparent 60%)',
+                  mixBlendMode: 'screen',
+                  filter: 'blur(15px)',
+                  transformOrigin: '40% 40%'
+                }}
+              />
+              
+              {/* Fluid Core 2: Vivid Purple */}
+              <motion.div
+                animate={{ rotate: -360, scale: [1.1, 0.9, 1.1] }}
+                transition={{ rotate: { duration: 10, repeat: Infinity, ease: 'linear' }, scale: { duration: 5, repeat: Infinity, ease: 'easeInOut' } }}
+                style={{
+                  position: 'absolute', width: '140%', height: '140%',
+                  top: '-20%', left: '-20%',
+                  background: 'radial-gradient(circle, #a78bfa 0%, transparent 60%)',
+                  mixBlendMode: 'screen',
+                  filter: 'blur(20px)',
+                  transformOrigin: '60% 60%'
+                }}
+              />
+
+              {/* Fluid Core 3: Intense Indigo Core */}
+              <motion.div
+                animate={{ rotate: 180, scale: [0.8, 1.1, 0.8] }}
+                transition={{ rotate: { duration: 6, repeat: Infinity, ease: 'linear' }, scale: { duration: 3, repeat: Infinity, ease: 'easeInOut' } }}
+                style={{
+                  position: 'absolute', width: '100%', height: '100%',
+                  top: '0%', left: '0%',
+                  background: 'radial-gradient(circle, rgba(129,140,248,0.9) 0%, transparent 50%)',
+                  mixBlendMode: 'overlay',
+                  filter: 'blur(10px)',
+                  transformOrigin: '50% 50%'
+                }}
+              />
+            </motion.div>
+
+            {/* Specular Highlight & Glass Border (Overlay) */}
+            <motion.div
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 1.4, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+              style={{
+                position: 'absolute',
+                width: 130, height: 130,
+                borderRadius: '50%',
+                background: 'radial-gradient(circle at 35% 35%, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.02) 40%, transparent 70%)',
+                boxShadow: 'inset 0 0 20px rgba(255,255,255,0.15), inset 0 0 4px rgba(255,255,255,0.3), 0 0 0 1px rgba(255,255,255,0.05)',
+                zIndex: 15,
+                pointerEvents: 'none'
+              }}
+            />
+          </div>
+
+          {/* Text Reveal Block */}
+          <div style={{ marginTop: 48, textAlign: 'center', position: 'relative', zIndex: 20 }}>
+            <motion.div
+              initial={{ opacity: 0, y: 12, filter: 'blur(8px)' }}
+              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+              transition={{ duration: 1.2, delay: 0.6, ease: [0.16, 1, 0.3, 1] }}
+              style={{
+                fontSize: 48, fontWeight: 700, letterSpacing: '-0.04em', lineHeight: 1,
+                fontFamily: 'Inter, -apple-system, sans-serif',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12
+              }}
+            >
+              <span style={{ color: '#fff' }}>Nebula</span>
+              <span style={{
+                background: 'linear-gradient(200deg, #c084fc 0%, #818cf8 40%, #c084fc 80%, #818cf8 100%)',
+                backgroundSize: '200% auto',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                animation: 'nebulaShine 4s linear infinite'
+              }}>
+                AI
+              </span>
+            </motion.div>
+            
+            <style>{`
+              @keyframes nebulaShine {
+                0% { background-position: 200% center; }
+                100% { background-position: 0% center; }
+              }
+            `}</style>
 
             <motion.p
-              initial={{ opacity: 0, y: 9 }}
+              initial={{ opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 1.48, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: 1, delay: 1.2, ease: "easeOut" }}
               style={{
-                marginTop: 10, fontSize: 12, fontWeight: 400,
-                letterSpacing: '0.08em', textTransform: 'uppercase',
-                color: '#8A8F98', fontFamily: 'Inter, system-ui, sans-serif',
+                marginTop: 14, fontSize: 13, fontWeight: 500,
+                letterSpacing: '0.12em', textTransform: 'uppercase',
+                color: 'rgba(255,255,255,0.4)', fontFamily: 'Inter, -apple-system, sans-serif'
               }}
             >
               Autonomous Infrastructure Intelligence
             </motion.p>
-
-            {/* Progress bar */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 1.78, duration: 0.3 }}
-              style={{ marginTop: 28, display: 'flex', justifyContent: 'center' }}
-            >
-              <div style={{
-                width: 120, height: 2,
-                background: 'rgba(255,255,255,0.07)',
-                borderRadius: 99, overflow: 'hidden',
-              }}>
-                <motion.div
-                  initial={{ width: '0%' }}
-                  animate={{ width: '100%' }}
-                  transition={{ duration: 1.05, delay: 1.88, ease: [0.16, 1, 0.3, 1] }}
-                  style={{
-                    height: '100%',
-                    background: 'linear-gradient(90deg, #5E6AD2 0%, #a78bfa 100%)',
-                    borderRadius: 99,
-                  }}
-                />
-              </div>
-            </motion.div>
           </div>
 
-          {/* ── skip button ── */}
-          <motion.button
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 1.15, duration: 0.4 }}
-            onClick={skip}
+          {/* Laser Progress Line */}
+          <motion.div
+            initial={{ opacity: 0, width: 0 }}
+            animate={{ opacity: 1, width: 280 }}
+            transition={{ 
+              opacity: { duration: 0.6, delay: 1.8 },
+              width: { duration: 1.5, delay: 1.8, ease: [0.16, 1, 0.3, 1] } 
+            }}
             style={{
-              position: 'absolute', bottom: 28, right: 28,
-              background: 'transparent',
-              border: '1px solid rgba(255,255,255,0.09)',
-              color: '#8A8F98', fontSize: 11, fontWeight: 500,
-              letterSpacing: '0.07em', textTransform: 'uppercase',
-              padding: '6px 16px', borderRadius: 8, cursor: 'pointer',
-              fontFamily: 'Inter, system-ui, sans-serif',
-              transition: 'border-color 0.2s, color 0.2s',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.22)';
-              e.currentTarget.style.color = '#EDEDEF';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.09)';
-              e.currentTarget.style.color = '#8A8F98';
+              marginTop: 48,
+              height: 1.5,
+              background: 'linear-gradient(90deg, transparent, rgba(167,139,250,0.8), transparent)',
+              boxShadow: '0 0 12px rgba(167,139,250,0.6)',
+              position: 'relative',
+              zIndex: 20
             }}
           >
-            Skip
+            {/* Glowing lead tip moving across the line */}
+            <motion.div
+              initial={{ left: '0%', opacity: 0 }}
+              animate={{ left: '100%', opacity: [0, 1, 1, 0] }}
+              transition={{ duration: 1.5, delay: 1.8, ease: [0.16, 1, 0.3, 1] }}
+              style={{
+                position: 'absolute',
+                top: -1.5,
+                width: 6, height: 4.5,
+                background: '#fff',
+                borderRadius: '50%',
+                boxShadow: '0 0 12px 3px #fff',
+                transform: 'translateX(-50%)'
+              }}
+            />
+          </motion.div>
+
+          {/* Skip Button (Ghost Style) */}
+          <motion.button
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 2.5, duration: 0.6 }}
+            onClick={skip}
+            style={{
+              position: 'absolute', bottom: 40,
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              color: 'rgba(255,255,255,0.5)', fontSize: 11, fontWeight: 600,
+              letterSpacing: '0.12em', textTransform: 'uppercase',
+              padding: '10px 24px', borderRadius: 99, cursor: 'pointer',
+              fontFamily: 'Inter, -apple-system, sans-serif',
+              backdropFilter: 'blur(12px)',
+              transition: 'all 0.3s ease',
+              zIndex: 30
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+              e.currentTarget.style.color = '#fff';
+              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.25)';
+              e.currentTarget.style.boxShadow = '0 0 20px rgba(167,139,250,0.2)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
+              e.currentTarget.style.color = 'rgba(255,255,255,0.5)';
+              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
+            Skip Sequence
           </motion.button>
+
         </motion.div>
       )}
     </AnimatePresence>
