@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle, Loader2, XCircle, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
+import { CheckCircle, Loader2, XCircle, ChevronDown, ChevronUp, AlertTriangle, Play } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const STEPS = [
@@ -188,17 +188,36 @@ export default function AWSSetup() {
                 </p>
               </div>
             </div>
-            <button 
+        <button 
               onClick={async () => {
                 if(!confirm('Are you sure you want to remove AWS credentials? This will drop the setup state entirely.')) return;
                 try {
                   const r = await fetch('/api/aws/credentials', { method: 'DELETE' });
                   if(r.ok) {
+                    // Full state reset — prevents blank page from stale state
                     setSetupStatus(null);
                     setFinalConfig(null);
                     setCompletedSteps([]);
+                    setCurrentStep(null);
+                    setStepLogs({});
+                    setFailedStep(null);
+                    setRunning(false);
+                    setFormError(null);
+                    setForm({
+                      aws_access_key_id: '',
+                      aws_secret_access_key: '',
+                      aws_region: 'us-east-1',
+                      allowed_ssh_cidr: '0.0.0.0/0',
+                    });
+                    // Close any open WS connection
+                    if (wsRef.current) {
+                      wsRef.current.close();
+                      wsRef.current = null;
+                    }
                   }
-                } catch(e) {}
+                } catch(e) {
+                  console.error('Failed to remove credentials:', e);
+                }
               }}
               className="px-3 py-1.5 font-medium text-[12px] rounded transition-all shadow-sm"
               style={{ background: 'rgba(244,63,94,0.15)', color: '#fb7185', border: '1px solid rgba(244,63,94,0.3)' }}
